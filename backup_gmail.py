@@ -170,7 +170,7 @@ class Gmail(object):
 			
 			if '\\Inbox' in attrbs:
 				xlabels['Inbox'] = label
-			elif '\\AllMail' in attrbs:
+			elif '\\AllMail' in attrbs: # no space 
 				xlabels['AllMail'] = label
 			elif '\\Drafts' in attrbs:
 				xlabels['Drafts'] = label
@@ -201,14 +201,9 @@ class Gmail(object):
 	def getGmailPrefix(self):
 		if self.gmail_prefix != None:
 			return self.gmail_prefix
-		labels = self.fetchLabelNames()
-		prefixs = filter(lambda x: x.find('/All Mail') != -1, labels)
-		if len(prefixs) == 0:
-			raise self.SelectMailBoxError('<All Mail>', labels)
-
-		p = prefixs[0].split('/')[0]
-		if len(prefixs) > 1:
-			print "There are multiple possible prefixs for Gmail mailbox use [%s]" % (p, )
+		specials = self.fetchSpecialLabels()
+		allMail = specials['AllMail']
+		p = allMail.split('/')[0]
 		self.gmail_prefix = p
 		return self.gmail_prefix
 
@@ -483,8 +478,6 @@ class RestoreGmail(Gmail):
 		return re.findall("APPENDUID [0-9]+ ([0-9]+)", msg[0])[0]
 
 	def __assignLabel(self, uid, label):
-		#FIXME need support for multi lanugage
-		#if label == "%s/All Mail" % (self.getGmailPrefix(), ): return
 		if label not in self.labels:
 			self.gmail.create(label)
 			self.labels = set(self.fetchLabelNames())
@@ -503,8 +496,9 @@ class RestoreGmail(Gmail):
 		self.progress.setText("Processing messages for restore [@value/@max]")
 		self.progress.setRange(1, len(self.mails))
 		
-		#FIXME need support for multi lanugage
-		#mail_count = self.selectMailBox('%s/All Mail' % (self.getGmailPrefix(), ))
+		specials = self.fetchSpecialLabels()
+		allMail = specials['AllMail']
+
 		mail_count = self.selectMailBox('INBOX')
 		for i, m in enumerate(self.mails.values()):
 			self.progress.setValue(i + 1)
@@ -525,7 +519,8 @@ class RestoreGmail(Gmail):
 				uid = self.__appendMessage(mail, date, 'INBOX')
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
-					self.__assignLabel(uid, label)
+					if label != allMail:
+						self.__assignLabel(uid, label)
 		print
 	
 class TerminalProgress:
