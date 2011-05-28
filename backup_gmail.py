@@ -87,16 +87,30 @@ class Gmail(object):
 		def __str__(self):
 			return "MailBox [%s] does not exists.\nMailBox List: %s" % (self.str, self.l)
 
-	def login(self, username, password):
+	class ApplicationError(Exception):
+		def __init__(self, str):
+			self.str = str
+
+		def __str__(self):
+			return repr(self.str)
+
+	def __init__(self, username, password):
+		self.mails = {}
+		self.mboxs = {}
+		self.labels = set()
+		self.gmail = None
 		self.username = username
+		self.password = password
+
+	def login(self):
 		self.gmail_prefix = None
 		self.gmail = imaplib.IMAP4_SSL('imap.gmail.com', 993)
 		try:
-			ret, message = self.gmail.login(username, password)
+			ret, message = self.gmail.login(self.username, self.password)
 		except Exception as e:
 			raise self.AuthError("username or password incorrect")
-	
-	def resultCountCheck(self, result, number):
+		
+	def __resultCountCheck(self, result, number):
 		if number.find(':') == -1:
 			return len(result) == 1
 		else:
@@ -106,7 +120,7 @@ class Gmail(object):
 	@UIDconverter
 	def fetchRFC822(self, uid):
 		data = []
-		while not self.resultCountCheck(data, uid):
+		while not self.__resultCountCheck(data, uid):
 			ret, data = self.gmail.fetch(uid, 'RFC822')
 			data = filter(lambda x: len(x) == 2, data)
 			data = map(lambda x:(getUID(x[0]), x[1]), data)
@@ -115,7 +129,7 @@ class Gmail(object):
 	@UIDconverter
 	def fetchMessageId(self, uid):
 		data = []
-		while not self.resultCountCheck(data, uid):
+		while not self.__resultCountCheck(data, uid):
 			ret, data = self.gmail.fetch(uid, '(BODY[HEADER.FIELDS (MESSAGE-ID)])')
 			data = filter(lambda x: len(x) == 2, data)
 			data = map(lambda x:(getUID(x[0]), getMID(x[1])), data)
@@ -124,7 +138,7 @@ class Gmail(object):
 	@UIDconverter
 	def fetchRFC822Info(self, uid): # return UID, SIZE, SEEN
 		data = []
-		while not self.resultCountCheck(data, uid):
+		while not self.__resultCountCheck(data, uid):
 			ret, data = self.gmail.fetch(uid, '(RFC822.SIZE FLAGS)')
 			data = map(lambda x : (getUID(x), re.findall('RFC822.SIZE ([0-9]+)', x)[0], re.search("Seen", x) != None), data)
 		return data
@@ -142,6 +156,31 @@ class Gmail(object):
 		else:
 			ret, result = self.gmail.search(None, '(SINCE "%s") (BEFORE "%s")' % (start, end))
 			return result[0].split()
+
+	def fetchSpecialLabels(self):
+		ret, result = self.gmail.xatom('XLIST', '', '*')
+		xlist = self.gmail.response('XLIST')[1]
+		xlabels = {}
+		for x in xlist:
+			m = re.match('\(([^\)]+)\) "/" "([^"]+)"', x)
+			if m is None:
+				continue
+			attrbs = set(m.group(1).split())
+			label = m.group(2)
+			
+			if '\\Inbox' in attrbs:
+				xlabels['Inbox'] = label
+			elif '\\AllMail' in attrbs:
+				xlabels['AllMail'] = label
+			elif '\\Drafts' in attrbs:
+				xlabels['Drafts'] = label
+			elif '\\Sent' in attrbs:
+				xlabels['Sent'] = label
+			elif '\\Starred' in attrbs:
+				xlabels['Starred'] = label
+			elif '\\Trash' in attrbs:
+				xlabels['Trash'] = label
+		return xlabels
 
 	def fetchLabelNames(self):
 		labels = self.gmail.list()[1]
@@ -175,11 +214,9 @@ class Gmail(object):
 
 	def checkDir(self):		
 		if not os.path.isdir(self.dest):
-			print >> sys.stderr, 'Error: [%s] is not a directory!\n' % (self.dest, )
-			exit()
+			raise ApplicationError('Error: [%s] is not a directory!\n' % (self.dest, ))
 
 	def readLabelFile(self):
-		self.labels = set()
 		labelFile = "%s/label" % (self.dest, )
 		if os.path.exists(labelFile):
 			with open(labelFile) as f:
@@ -189,11 +226,15 @@ class Gmail(object):
 					for l in m.labels:
 						self.labels.add(l)
 
-	def isInTimeFrame(self, date_range, date):
-		if date == None:
+	def isInTimeFrame(self, date_range, dateTuple):
+		if dateTuple == None:
 			return True
 		if date_range == None or (date_range[0] == None and date_range[1] == None):
 			return True
+		try:
+			date = datetime(*dateTuple[:7])
+		except:
+			return False
 		if date_range[0] == None:
 			end = datetime.strptime(date_range[1], "%d-%b-%Y")
 			return date < end
@@ -212,12 +253,11 @@ class Gmail(object):
 
 class BackupGmail(Gmail):
 	def __init__(self, username, password, dest, progress = None):
-		self.login(username, password)
-		self.mboxs = {}
-		self.mails = {}
+		super(BackupGmail, self).__init__(username, password)
 		self.keep_read_status = False
 		self.progress = progress
 		self.dest = dest
+		self.strict_exclude = False
 		self.exclude_mids = set()
 
 		self.fetchBuffer = []
@@ -225,15 +265,12 @@ class BackupGmail(Gmail):
 		self.fetchEnd = '-1'
 		self.fetchSize = 0
 
-	def getUserFile(self):
-		return self.dest + '/backup-username.ini'
-		
-	def initProgress(self, infos):
+	def __initProgress(self, infos):
 		total = sum(map(lambda x:int(x[1]), infos))
 		self.progress.setRange(0, total)
 		self.progress.setValue(0)
 
-	def fetchMailByLabel(self, label, date_range):
+	def __fetchMailByLabel(self, label, date_range):
 		self.progress.setText("Fetching %s [calculate size]" % (label, ))
 
 		isValid = self.isValidMailBox(label)
@@ -252,7 +289,7 @@ class BackupGmail(Gmail):
 			envs = self.fetchMessageId(date_range)
 
 		self.progress.setText("Fetching %s [@value/@max]" % (label, ))
-		self.initProgress(infos)
+		self.__initProgress(infos)
 		total = 0
 
 		for i, (env, info) in enumerate(zip(envs, infos)):
@@ -260,7 +297,7 @@ class BackupGmail(Gmail):
 			uid, size, seen = info
 			if mid not in self.mails:
 				if mid not in self.exclude_mids:
-					self.fetchMail(uid, seen, label, size)
+					self.__fetchMail(uid, seen, label, size)
 			else:
 				self.mails[mid].labels.add(label)
 				if seen == False and self.keep_read_status:
@@ -271,9 +308,9 @@ class BackupGmail(Gmail):
 		self.progress.newLine()
 			
 		#Flush all pending request
-		self.flushFetchMailRequest()
+		self.__flushFetchMailRequest()
 
-	def processMail(self, rfc, seen, label):
+	def __processMail(self, rfc, seen, label):
 		mail = email.message_from_string(rfc)
 		date = email.utils.parsedate(mail.get('date'))
 		if date == None or len(date) != 9:
@@ -284,15 +321,21 @@ class BackupGmail(Gmail):
 		mid = mail.get('message-id')
 		if mid == None: 
 			mid = "<%s@backupgmail.com>" % (h, )
-			mail.add_header('message-id', mid)
-			rfc = mail.as_string()
-			mail = email.message_from_string(rfc)
-		try:
-			os.mkdir("%s/%s" % (self.dest, fold))
-		except OSError as e:
-			pass
-		with open("%s/%s/%s" % (self.dest, fold, h), 'w') as f:
-			f.write(rfc)
+
+		mdir = "%s/%s" % (self.dest, fold)
+		if not os.path.isdir(mdir):
+			os.mkdir(mdir)
+
+		mfile = "%s/%s/%s" % (self.dest, fold, h)
+		if not os.path.exists(mfile):
+			with open(mfile, 'w') as f:
+				try:
+					f.write(rfc)			
+				except:
+					# in case the write fails, delete the file 
+					f.close()
+					os.remove(mfile)
+					raise
 
 		if mid not in self.mails:
 			self.mails[mid] = MailMetaData(mid, h, fold)
@@ -300,7 +343,7 @@ class BackupGmail(Gmail):
 
 		self.mails[mid].labels.add(label)
 
-	def flushFetchMailRequest(self):
+	def __flushFetchMailRequest(self):
 		if self.fetchBuffer == []:
 			return
 
@@ -310,50 +353,50 @@ class BackupGmail(Gmail):
 				if self.fetchBuffer[i][0] == False:
 					self.unsetFlag(rfc[0], '\\Seen')
 		for i, rfc in enumerate(rfcs):
-			self.processMail(rfc[1], *self.fetchBuffer[i])
+			self.__processMail(rfc[1], *self.fetchBuffer[i])
 
 		self.fetchBuffer = []
 		self.fetchEnd = '-1'
 		self.fetchSize = 0
 
-	def fetchMail(self, uid, seen, label, size):
+	def __fetchMail(self, uid, seen, label, size):
 		size = int(size)
 		if len(self.fetchBuffer) > 300 or self.fetchSize > 10000000:
-			self.flushFetchMailRequest()
+			self.__flushFetchMailRequest()
 		if int(self.fetchEnd) + 1 == int(uid):
 			self.fetchEnd = uid
 			self.fetchBuffer += [(seen, label)]
 			self.fetchSize += size
 		else:
-			self.flushFetchMailRequest()
+			self.__flushFetchMailRequest()
 			self.fetchStart = uid
 			self.fetchEnd = uid
 			self.fetchBuffer += [(seen, label)]
 			self.fetchSize += size
-	
-	def fetchAllLabel(self, date_range, exclude_labels = []):
-		#FIXME need support for multi lanugage
-		#ignore = ['%s/All Mail' % (self.getGmailPrefix(), ),
-		#		'%s/Trash' % (self.getGmailPrefix(), ),
-	        #   		'%s/Spam' % (self.getGmailPrefix(), )] + exclude_labels
-		#labels = filter(lambda x : x not in ignore , self.fetchLabelNames())
+
+	# Fetch default Gmail folders excluding the special \Drafts and \Trash 
+	def __fetchDefaultLabels(self):
 		labels = self.fetchLabelNames()
+		specials = self.fetchSpecialLabels()
+		allMail = specials['AllMail']
+		if allMail not in labels:
+			labels.append(allMail)
+		ignore = [ specials['Drafts'], specials['Trash'] ] 
+		labels = filter(lambda x : x not in ignore , labels)
+		return labels
 
-		for l in labels:
-			self.fetchMailByLabel(l, date_range)
-
-	def fetchAllMail(self, date_range, exclude_labels = []):
-		if exclude_labels != []:
-			labels = filter(lambda x : x in exclude_labels, self.fetchLabelNames())
-			for l in labels:
+	def __fetchByLabels(self, date_range, include_labels, exclude_labels):
+		self.exclude_mids = set()
+		if self.strict_exclude:
+			for l in filter(lambda x : x in exclude_labels, self.fetchLabelNames()):
 				mail_count = self.selectMailBox(l)
 				tmp = set(map(lambda x:x[1], self.fetchMessageId("1:%s" % (mail_count[0], ))))
 				self.exclude_mids.update(tmp)
-		#FIXME need support for multi lanugage
-		#self.fetchMailByLabel('%s/All Mail' % (self.getGmailPrefix(), ), date_range)
-		self.fetchAllLabel(date_range, exclude_labels)
+		
+		for l in set(include_labels).difference(set(exclude_labels)):
+			self.__fetchMailByLabel(l, date_range)
 	
-	def outputLable(self):
+	def __outputLable(self):
 		with open(self.dest + '/label', 'w') as f:
 			for k in self.mails:
 				print >> f, self.mails[k]
@@ -363,47 +406,29 @@ class BackupGmail(Gmail):
 			os.mkdir(self.dest)
 
 		self.checkDir()
-		
-		unf = self.getUserFile()
-		if os.path.exists(unf):
-			with open(unf) as f:
-				storedName = f.read()
-			if self.username != storedName:
-				print >> sys.stderr, 'Error: [%s] does not match username!\n' % (unf, )
-				exit()
-		else:
-			with open(unf, 'w') as f:
-				f.write(self.username)
-	
-	def _doBackup(self, date_range = None, include_labels = None, exclude_labels = None):
-		try:
-			self.mboxs = {}
-			if include_labels == None and exclude_labels == None:
-				self.fetchAllMail(date_range)
-			elif include_labels != None:
-				for l in include_labels:
-					self.fetchMailByLabel(l, date_range)
-			elif exclude_labels != None:
-				self.fetchAllMail(date_range, exclude_labels)
-		finally:
-			self.outputLable()
-			for m in self.mboxs:
-				self.mboxs[m].flush()
 
-	def backupTo(self, date_range = None, include_labels = None, exclude_labels = None):
+	def backupTo(self, date_range = None, include_labels = None, exclude_labels = []):
 		self.makeDir()
 		self.readLabelFile()
-		self._doBackup(date_range, include_labels, exclude_labels)
+		self.login()
+
+		try:
+			if include_labels == None:
+				include_labels = self.__fetchDefaultLabels()
+			if exclude_labels == None:
+				exclude_labels = []
+			self.__fetchByLabels(date_range, include_labels, exclude_labels)
+		finally:
+			self.__outputLable()
 
 class SaveMbox(Gmail):
 	def __init__(self, src, mbox_export, progress):
+		super(SaveMbox, self).__init__(None, None)
 		self.progress = progress
 		self.dest = src
 		self.mbox_export = mbox_export
-		self.mails = {}
-		self.mboxs = {}
 
-	def addToMBox(self, label, mail):
+	def __addToMBox(self, label, mail):
 		if label not in self.mboxs:
 			odir = os.path.expanduser(self.mbox_export)
 			self.mboxs[label] = mailbox.mbox('%s/%s.mbox' % (odir, label.replace('/', '-'), ), create = True)
@@ -418,10 +443,12 @@ class SaveMbox(Gmail):
 		odir = os.path.expanduser(self.mbox_export)
 		if not os.path.exists(odir):
 			os.mkdir(odir)
-		
-		self.progress.setText('Saving mboxes to [%s]' % self.mbox_export)
+
+		self.progress.setText("Processing messages to mbox(es) [@value/@max]")
+		self.progress.setRange(1, len(self.mails))
 		
 		for i, m in enumerate(self.mails.values()):
+			self.progress.setValue(i + 1)
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
 			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
 			if include_labels != None and include == set():
@@ -431,29 +458,31 @@ class SaveMbox(Gmail):
 			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
-				date = email.utils.parsedate(e.get('date'))
-				if date != None and not self.isInTimeFrame(date_range, datetime(*date[:7])):
-					continue
+				if not date_range is None:
+					dateTuple = email.utils.parsedate(e.get('date'))
+					if not self.isInTimeFrame(date_range, dateTuple):
+						continue
 					
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
-					self.addToMBox(label, mail)
-		
+					self.__addToMBox(label, mail)
+
+		for i, m in enumerate(self.mboxs.values()):
+			m.flush()
+			
 		self.progress.newLine()
 		
 class RestoreGmail(Gmail):
 	def __init__(self, username, password, src, progress):
-		self.login(username, password)
-		self.labels = set(self.fetchLabelNames())
+		super(RestoreGmail, self).__init__(username, password)
 		self.progress = progress
 		self.dest = src
-		self.mails = {}
 
-	def appendMessage(self, message, date, mailbox = None):
+	def __appendMessage(self, message, date, mailbox = None):
 		ret, msg = self.gmail.append(mailbox, None, date, message)
 		return re.findall("APPENDUID [0-9]+ ([0-9]+)", msg[0])[0]
 
-	def assignLabel(self, uid, label):
+	def __assignLabel(self, uid, label):
 		#FIXME need support for multi lanugage
 		#if label == "%s/All Mail" % (self.getGmailPrefix(), ): return
 		if label not in self.labels:
@@ -463,14 +492,22 @@ class RestoreGmail(Gmail):
 	
 	def restore(self, date_range = None, include_labels = None, exclude_labels = None):
 		self.checkDir()
+		self.login()
+
+		# Read label file for messages, but then set self.labels to what
+		# exists on the server. Each message in self.mails will still have 
+		# its private set of labels
 		self.readLabelFile()
-				
+		self.labels = set(self.fetchLabelNames())
+
+		self.progress.setText("Processing messages for restore [@value/@max]")
+		self.progress.setRange(1, len(self.mails))
+		
 		#FIXME need support for multi lanugage
 		#mail_count = self.selectMailBox('%s/All Mail' % (self.getGmailPrefix(), ))
 		mail_count = self.selectMailBox('INBOX')
 		for i, m in enumerate(self.mails.values()):
-			print "\r%d" % (i), 
-			sys.stdout.flush()
+			self.progress.setValue(i + 1)
 
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
 			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
@@ -481,15 +518,14 @@ class RestoreGmail(Gmail):
 			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
-				date = email.utils.parsedate(e.get('date'))
-				if date != None and not self.isInTimeFrame(date_range, datetime(*date[:7])):
-					continue
-				#FIXME need support for multi lanugage
-				#uid = self.appendMessage(mail, date, '%s/All Mail' % (self.getGmailPrefix(), ))
-				uid = self.appendMessage(mail, date, 'INBOX')
+				if not date_range is None:
+					dateTuple = email.utils.parsedate(e.get('date'))
+					if not self.isInTimeFrame(date_range, dateTuple):
+						continue
+				uid = self.__appendMessage(mail, date, 'INBOX')
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
-					self.assignLabel(uid, label)
+					self.__assignLabel(uid, label)
 		print
 	
 class TerminalProgress:
@@ -537,8 +573,6 @@ def loadConfigFile(options, filename):
 		result[section].backup_dir = config.get(section, 'backup_dir')
 		if config.has_option(section, 'keep_read'):
 			result[section].keep_read = config.getboolean(section, 'keep_read')
-		if config.has_option(section, 'incremental'):
-			result[section].incremental = config.getboolean(section, 'incremental')
 		if config.has_option(section, 'start_date'):
 			result[section].start_date = config.get(section, 'start_date')
 		if config.has_option(section, 'end_date'):
@@ -547,6 +581,8 @@ def loadConfigFile(options, filename):
 			result[section].include_labels = config.get(section, 'include_labels')
 		if config.has_option(section, 'exclude_labels'):
 			result[section].exclude_labels = config.get(section, 'exclude_labels')
+		if config.has_option(section, 'strict_exclude'):
+			result[section].strict_exclude = config.get(section, 'strict_exclude')
 	return result
 
 def saveConfigFile(profiles, filename):
@@ -562,40 +598,43 @@ def saveConfigFile(profiles, filename):
 		set_helper(config, section, 'password', p.password)
 		set_helper(config, section, 'backup_dir', p.backup_dir)
 		set_helper(config, section, 'keep_read', p.keep_read)
-		set_helper(config, section, 'incremental', p.incremental)
 		set_helper(config, section, 'start_date', p.start_date)
 		set_helper(config, section, 'end_date', p.end_date)
 		set_helper(config, section, 'include_labels', p.include_labels)
 		set_helper(config, section, 'exclude_labels', p.exclude_labels)
+		set_helper(config, section, 'strict_exclude', p.strict_exclude)
 	with open(filename, 'w') as f:
 		config.write(f)
 
 def getOptionParser():
-	parser = optparse.OptionParser(usage = "%prog backup_dir email@address password")
+	parser = optparse.OptionParser(usage = "%prog backup_dir [email@address password]")
+	parser.add_option("-P", "--prompt", dest="prompt", action="store_true", default = False, help = "Prompt for Gmail credentials")
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to online gmail account")
-	parser.add_option("-i", "--inc", dest="incremental", action="store_true", default = False, help = "Use incremental backup")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
 	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status (Slow)")
 	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date. Format: 30-Jan-2010")
 	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date Format: 30-Jan-2010")
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
-	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. If --include is used this flag will be ignored. Seperate labels by '^' Format: label1^label2")
+	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
+	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
 	parser.add_option("-c", "--config", dest="config_file", action="store", help = "Load setting from config file")
 	parser.add_option("-p", "--profile", dest="profile", action="store", default = "Main", help = "Use this profile in the config file.")
 	return parser
 
 def doBackup(options, progress):
-	include_labels = exclude_labels = None
+	include_labels = None
+	exclude_labels = []
 	if options.include_labels != None:
 		include_labels = options.include_labels.split('^')
 	if options.exclude_labels != None:
 		exclude_labels = options.exclude_labels.split('^')
 	
 	backup = BackupGmail(options.username, options.password, options.backup_dir, progress)
+	backup.strict_exclude = options.strict_exclude
 	backup.keep_read_status = options.keep_read
 	backup.backupTo([options.start_date, options.end_date], include_labels, exclude_labels)
 
-def doRestore(options, progress, dummy = False):
+def doRestore(options, progress):
 	include_labels = exclude_labels = None
 	if options.include_labels != None:
 		include_labels = options.include_labels.split('^')
@@ -619,32 +658,42 @@ if __name__ == '__main__':
 	parser = getOptionParser()
 	(options, args) = parser.parse_args()
 	
+	if len(args) < 1:
+		parser.print_help()
+		exit()
+	options.backup_dir = args[0]
+
 	if options.config_file != None:
 		options = loadConfigFile(options, options.config_file)[options.profile]
-	elif len(args) < 1:
-		parser.print_help()
-		exit()
-	else:
-		options.backup_dir = args[0]
-		if not options.mbox_export:
-			if len(args) < 3:
-				parser.print_help()
-				exit()
-			else:
-				options.username = args[1]
-				options.password = args[2]
 
-	if options.backup_dir is None:
+	options.username = None
+	options.password = None
+	
+	if len(args) >= 2:
+		options.username = args[1]
+	if len(args) >= 3:
+		options.password = args[2]
+
+	if options.prompt:
+		import getpass
+		options.username = raw_input('Username: ')
+		options.password = getpass.getpass()
+		
+	canConnect = (not options.username is None and not options.password is None)
+	if options.mbox_export is None and canConnect == False:
 		parser.print_help()
 		exit()
-	
+		
 	try:
-		if not options.mbox_export is None:
-			doMbox(options, TerminalProgress())
+		if canConnect == False:
+			pass
 		elif options.restore == True:
 			doRestore(options, TerminalProgress())
 		else:
 			doBackup(options, TerminalProgress())
+			
+		if not options.mbox_export is None:
+			doMbox(options, TerminalProgress())
 	except Exception as e:
 		traceback.print_exc(e)
 		exit()
