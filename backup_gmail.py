@@ -148,6 +148,10 @@ class Gmail(object):
 			filter(lambda x : len(x) > 0, 
 			map(lambda x : re.findall('\(\\\\HasNoChildren\) "/" "([^"]+)"', x), labels)))
 
+	def isValidMailBox(self, name):
+		ret, mail_count = self.gmail.select(name)
+		return (ret != 'NO')
+
 	def selectMailBox(self, name):
 		ret, mail_count = self.gmail.select(name)
 		if ret == 'NO':
@@ -200,7 +204,14 @@ class BackupGmail(Gmail):
 		self.progress.setValue(0)
 
 	def fetchMailByLabel(self, label, date_range):
-		self.progress.setText("\rFetching %s [calculate size]                           \r" % (label, ))
+		self.progress.setText("Fetching %s [calculate size]" % (label, ))
+
+		isValid = self.isValidMailBox(label)
+		if isValid == False:
+			self.progress.setText("Label [%s] does not exist." % (label, ))
+			self.progress.newLine()
+			return
+
 		mail_count = self.selectMailBox(label)
 		if date_range[0] == None and date_range[1] == None:
 			infos = self.fetchRFC822Info('1:%s' % (mail_count[0], ))
@@ -210,7 +221,7 @@ class BackupGmail(Gmail):
 			infos = self.fetchRFC822Info(date_range)
 			envs = self.fetchMessageId(date_range)
 
-		self.progress.setText("\rFetching %s [@value/@max]                           \r" % (label, ))
+		self.progress.setText("Fetching %s [@value/@max]" % (label, ))
 		self.initProgress(infos)
 		total = 0
 
@@ -227,6 +238,8 @@ class BackupGmail(Gmail):
 					self.unsetFlag(uid, '\\Seen')
 			total += int(size)
 			self.progress.setValue(total)
+
+		self.progress.newLine()
 			
 		#Flush all pending request
 		self.flushFetchMailRequest()
@@ -456,8 +469,16 @@ class TerminalProgress:
 		x = self.text
 		x = x.replace('@value', str(self.value))
 		x = x.replace('@max', str(self.max))
+		xlen = len(x)
+		if xlen > 80:
+			x = x[0:79]
+		elif xlen < 80:
+			x = x + ' ' * (80 - xlen)
 		print '\r%s' % (x, ),
 		sys.stdout.flush()
+		
+	def newLine(self):
+		print '\r\n'
 
 def loadConfigFile(options, filename):
 	config = ConfigParser.SafeConfigParser()
