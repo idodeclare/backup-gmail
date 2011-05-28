@@ -1,0 +1,11 @@
+backup-gmail 0.1.1
+  * Implemented restore function
+  * Implemented configure file
+  * Support multiple accounts
+
+backup-gmail 0.1
+
+  * Only implemented backup function
+  * Support incremental backup based on Message-Id
+  * Support label and date filter
+  * Preserve server unread flags

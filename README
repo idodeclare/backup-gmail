@@ -1,0 +1,9 @@
+Copyright 2011, Joseph Wen
+
+For more information visit:
+https://launchpad.net/backup-gmail
+
+== Usage ==
+./backup_gmail.py
+or
+./gui.py
