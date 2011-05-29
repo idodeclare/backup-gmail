@@ -170,7 +170,7 @@ class Gmail(object):
 			
 			if '\\Inbox' in attrbs:
 				xlabels['Inbox'] = label
-			elif '\\AllMail' in attrbs: # no space 
+			elif '\\AllMail' in attrbs:    # no space 
 				xlabels['AllMail'] = label
 			elif '\\Drafts' in attrbs:
 				xlabels['Drafts'] = label
@@ -202,7 +202,7 @@ class Gmail(object):
 		if self.gmail_prefix != None:
 			return self.gmail_prefix
 		specials = self.fetchSpecialLabels()
-		allMail = specials['AllMail']
+		allMail = specials['AllMail']    # no space
 		p = allMail.split('/')[0]
 		self.gmail_prefix = p
 		return self.gmail_prefix
@@ -375,7 +375,7 @@ class BackupGmail(Gmail):
 	def __fetchDefaultLabels(self):
 		labels = self.fetchLabelNames()
 		specials = self.fetchSpecialLabels()
-		allMail = specials['AllMail']
+		allMail = specials['AllMail']    # no space
 		if allMail not in labels:
 			labels.append(allMail)
 		ignore = [ specials['Drafts'], specials['Trash'] ] 
@@ -401,7 +401,6 @@ class BackupGmail(Gmail):
 	def makeDir(self):
 		if not os.path.exists(self.dest):
 			os.mkdir(self.dest)
-
 		self.checkDir()
 
 	def backupTo(self, date_range = None, include_labels = None, exclude_labels = []):
@@ -500,7 +499,7 @@ class RestoreGmail(Gmail):
 		self.progress.setRange(0, len(self.mails))
 		
 		specials = self.fetchSpecialLabels()
-		allMail = specials['AllMail']
+		allMail = specials['AllMail']    # no space
 
 		mail_count = self.selectMailBox('INBOX')
 		for i, m in enumerate(self.mails.values()):
