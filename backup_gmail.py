@@ -447,7 +447,7 @@ class SaveMbox(Gmail):
 			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
-				if not date_range is None:
+				if date_range is not None:
 					dateTuple = email.utils.parsedate(e.get('date'))
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
@@ -506,7 +506,7 @@ class RestoreGmail(Gmail):
 			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
-				if not date_range is None:
+				if date_range is not None:
 					dateTuple = email.utils.parsedate(e.get('date'))
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
@@ -552,28 +552,58 @@ class TerminalProgress:
 	def newLine(self):
 		print 
 
+class KeyringUtil:
+	KC_SERVICE_TEMPLATE = 'backup_gmail (%s)'
+	
+	def __init__(self):
+		try:
+			import keyring
+		except ImportError:
+			self.get_password_function = self.__noop_get_password
+			self.set_password_function = self.__noop_set_password
+		else:
+			self.get_password_function = keyring.get_password
+			self.set_password_function = keyring.set_password
+
+	def get_password(self, username):
+		servicename = self.KC_SERVICE_TEMPLATE % (username, )
+		return self.get_password_function(servicename, username)
+
+	def set_password(self, username, password):
+		servicename = self.KC_SERVICE_TEMPLATE % (username, )
+		self.set_password_function(servicename, username, password)
+
+	def __noop_get_password(self, servicename, username):
+		return None
+
+	def __noop_set_password(self, servicename, username, password):
+		return
+
 def loadConfigFile(options, filename):
 	config = ConfigParser.SafeConfigParser()
 	config.read([filename, os.path.expanduser('~/.backup_gmail.cfg')])
+	keyu = KeyringUtil()
 	result = {}
 	for section in config.sections():
-		result[section] = copy.copy(options)
-		result[section].username = config.get(section, 'username')
-		result[section].backup_dir = config.get(section, 'backup_dir')
+		rsec = result[section] = copy.copy(options)
+		rsec.username = config.get(section, 'username')
+		rsec.backup_dir = config.get(section, 'backup_dir')
 		if config.has_option(section, 'keep_read'):
-			result[section].keep_read = config.getboolean(section, 'keep_read')
+			rsec.keep_read = config.getboolean(section, 'keep_read')
 		if config.has_option(section, 'start_date'):
-			result[section].start_date = config.get(section, 'start_date')
+			rsec.start_date = config.get(section, 'start_date')
 		if config.has_option(section, 'end_date'):
-			result[section].end_date = config.get(section, 'end_date')
+			rsec.end_date = config.get(section, 'end_date')
 		if config.has_option(section, 'include_labels'):
-			result[section].include_labels = config.get(section, 'include_labels')
+			rsec.include_labels = config.get(section, 'include_labels')
 		if config.has_option(section, 'exclude_labels'):
-			result[section].exclude_labels = config.get(section, 'exclude_labels')
+			rsec.exclude_labels = config.get(section, 'exclude_labels')
 		if config.has_option(section, 'mbox_export'):
-			result[section].mbox_export = config.get(section, 'mbox_export')
+			rsec.mbox_export = config.get(section, 'mbox_export')
 		if config.has_option(section, 'strict_exclude'):
-			result[section].strict_exclude = config.get(section, 'strict_exclude')
+			rsec.strict_exclude = config.get(section, 'strict_exclude')
+		if rsec.username is not None and len(rsec.username):
+			rsec.password = keyu.get_password(rsec.username)
 	return result
 
 def saveConfigFile(profiles, filename):
@@ -581,6 +611,7 @@ def saveConfigFile(profiles, filename):
 		if value == None:
 			return
 		return cfg.set(section, option, str(value))
+	keyu = KeyringUtil()
 	config = ConfigParser.SafeConfigParser()
 	for section in profiles:
 		p = profiles[section]
@@ -594,6 +625,9 @@ def saveConfigFile(profiles, filename):
 		set_helper(config, section, 'exclude_labels', p.exclude_labels)
 		set_helper(config, section, 'mbox_export', p.mbox_export)
 		set_helper(config, section, 'strict_exclude', p.strict_exclude)
+		if p.password is not None and len(p.password):
+			if p.username is not None and len(p.username):
+				keyu.set_password(p.username, p.password)
 	with open(filename, 'w') as f:
 		config.write(f)
 
@@ -669,7 +703,7 @@ if __name__ == '__main__':
 		options.username = raw_input('Username: ')
 		options.password = getpass.getpass()
 		
-	canConnect = (not options.username is None and not options.password is None)
+	canConnect = (options.username is not None and options.password is not None)
 	if options.mbox_export is None and canConnect == False:
 		parser.print_help()
 		exit()
@@ -682,7 +716,7 @@ if __name__ == '__main__':
 		else:
 			doBackup(options, TerminalProgress())
 			
-		if not options.mbox_export is None:
+		if options.mbox_export is not None:
 			doMbox(options, TerminalProgress())
 	except Exception as e:
 		traceback.print_exc(e)
