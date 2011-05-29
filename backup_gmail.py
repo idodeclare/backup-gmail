@@ -299,11 +299,13 @@ class BackupGmail(Gmail):
 					self.unsetFlag(uid, '\\Seen')
 			total += int(size)
 			self.progress.setValue(total)
-
-		self.progress.newLine()
 			
 		#Flush all pending request
 		self.__flushFetchMailRequest()
+
+		self.progress.setText("Fetched %s [@value/@max]" % (label, ))
+		self.progress.setValue(total)
+		self.progress.newLine()
 
 	def __processMail(self, rfc, seen, label):
 		mail = email.message_from_string(rfc)
@@ -440,8 +442,8 @@ class SaveMbox(Gmail):
 			os.mkdir(odir)
 
 		self.progress.setText("Processing messages to mbox(es) [@value/@max]")
-		self.progress.setRange(1, len(self.mails))
-		
+		self.progress.setRange(0, len(self.mails))
+
 		for i, m in enumerate(self.mails.values()):
 			self.progress.setValue(i + 1)
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
@@ -464,7 +466,8 @@ class SaveMbox(Gmail):
 
 		for i, m in enumerate(self.mboxs.values()):
 			m.flush()
-			
+
+		self.progress.setText("Processed @values message(s) to mbox(es)")
 		self.progress.newLine()
 		
 class RestoreGmail(Gmail):
@@ -494,7 +497,7 @@ class RestoreGmail(Gmail):
 		self.labels = set(self.fetchLabelNames())
 
 		self.progress.setText("Processing messages for restore [@value/@max]")
-		self.progress.setRange(1, len(self.mails))
+		self.progress.setRange(0, len(self.mails))
 		
 		specials = self.fetchSpecialLabels()
 		allMail = specials['AllMail']
@@ -502,7 +505,6 @@ class RestoreGmail(Gmail):
 		mail_count = self.selectMailBox('INBOX')
 		for i, m in enumerate(self.mails.values()):
 			self.progress.setValue(i + 1)
-
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
 			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
 			if include_labels != None and include == set():
@@ -521,7 +523,8 @@ class RestoreGmail(Gmail):
 				for label in updateLabel:
 					if label != allMail:
 						self.__assignLabel(uid, label)
-		print
+
+		self.progress.setText("Processed @value message(s) for restore")
 	
 class TerminalProgress:
 	def __init__(self):
@@ -617,8 +620,7 @@ def getOptionParser():
 	return parser
 
 def doBackup(options, progress):
-	include_labels = None
-	exclude_labels = []
+	include_labels = exclude_labels = None
 	if options.include_labels != None:
 		include_labels = options.include_labels.split('^')
 	if options.exclude_labels != None:

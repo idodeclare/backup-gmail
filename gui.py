@@ -45,7 +45,6 @@ class MainWindow(QMainWindow):
 		self.backup_path_btn = QPushButton("Select")
 
 		self.keep_read = QCheckBox("Keep read/unread (Slow)")
-		self.inc = QCheckBox("Incremental Backup")
 
 		self.start_date_label = QLabel("From:")
 		self.start_date = QDateEdit()
@@ -115,7 +114,6 @@ class MainWindow(QMainWindow):
 		
 		checkLayout = QHBoxLayout()
 		checkLayout.addWidget(self.keep_read)
-		checkLayout.addWidget(self.inc)
 
 		vLayout.addLayout(layout)
 		vLayout.addLayout(checkLayout)
@@ -165,7 +163,6 @@ class MainWindow(QMainWindow):
 		self.backup_path.setText(options.backup_dir)
 
 		self.keep_read.setChecked(options.keep_read == True)
-		self.inc.setChecked(options.incremental == True)
 
 		if options.start_date != None:
 			self.start_date_enable.setChecked(True)
@@ -193,7 +190,6 @@ class MainWindow(QMainWindow):
 		options.password = self.pass_text.text()
 		options.backup_dir = self.backup_path.text()
 		options.keep_read = self.keep_read.isChecked()
-		options.incremental = self.inc.isChecked()
 		if self.start_date_enable.isChecked():
 			options.start_date = self.start_date.date().toString("dd-MMM-yyyy")
 		else:
@@ -204,14 +200,13 @@ class MainWindow(QMainWindow):
 		else:
 			options.end_date = None
 		
+		options.include_labels = None
+		options.exclude_labels = None
 		if self.label_filter_text.text() != '':
 			if self.include_label.isChecked():
 				options.include_labels = self.label_filter_text.text()
 			else:
 				options.exclude_labels = self.label_filter_text.text()
-		else:
-			options.include_labels = None
-			options.exclude_labels = None
 
 	def storeConfig(self):
 		name = QFileDialog.getSaveFileName(self, "Open File", ".", "Config (*.cfg)")
@@ -221,6 +216,7 @@ class MainWindow(QMainWindow):
 				name += '.cfg'
 			print name
 			self.saveUI(self.config_file[self.current_profile])
+			self.config_file[self.current_profile].password = "" # don't save passwords 
 			backup_gmail.saveConfigFile(self.config_file, name)
 
 	def loadConfig(self):
@@ -234,7 +230,7 @@ class MainWindow(QMainWindow):
 			for section in result:
 				self.config_select.addItem(section)
 			self.current_profile = self.config_select.itemText(0)
-			self.setUI(result[self.config_select.itemText(0)])
+			self.setUI(result[self.current_profile])
 			self.config_file = result
 
 	def backup(self):
@@ -284,36 +280,28 @@ class MainWindow(QMainWindow):
 
 	def show_error(self, message):
 		msgBox = QMessageBox()
-		msgBox.setWindowTitle("Error")
+		msgBox.setText("An error has occurred.")
 		msgBox.setIcon(QMessageBox.Critical)
-		msgBox.setText(message)
+		msgBox.setInformativeText(message)
 		msgBox.exec_()
 	
-	def show_password_error(self):
+	def show_backup_success(self, progress):
 		msgBox = QMessageBox()
-		msgBox.setWindowTitle("Error")
-		msgBox.setIcon(QMessageBox.Critical)
-		msgBox.setText("username or password incorrect")
-		msgBox.exec_()
-	
-	def show_backup_success(self):
-		msgBox = QMessageBox()
-		msgBox.setWindowTitle("Success")
+		msgBox.setText("The backup was successful.")
 		msgBox.setIcon(QMessageBox.Information)
-		msgBox.setText("Backup success")
+		msgBox.setInformativeText(progress)
 		msgBox.exec_()
 	
-	def show_restore_success(self):
+	def show_restore_success(self, progress):
 		msgBox = QMessageBox()
-		msgBox.setWindowTitle("Success")
+		msgBox.setText("The restore was successful")
 		msgBox.setIcon(QMessageBox.Information)
-		msgBox.setText("Restore success")
+		msgBox.setInformativeText(progress)
 		msgBox.exec_()
 
 	def backup_restore_finished(self):
 		self.restore_btn.setDisabled(False)
 		self.backup_btn.setDisabled(False)
-
 		self.progress.close()
 
 	def update_progress(self):
@@ -327,16 +315,24 @@ class GuiProgress:
 		self.max = 1000
 		self.value = 0
 		self.text = ""
+		self.lines = []
 
 	def setRange(self, a, b):
 		self.min = a
-		self.max = b / 1000.0
+		self.max = int(b / 1000.0)
 
 	def setValue(self, value):
-		self.value = value / 1000.0
+		self.value = int(value / 1000.0)
 
 	def setText(self, text):
 		self.text = text
+
+	def newLine(self):
+		self.lines.append(self.getText())
+		return
+
+	def getLines(self):
+		return self.lines;
 
 	def getText(self):
 		tmp = self.text.replace("@max", str(self.max))
@@ -346,7 +342,7 @@ class GuiProgress:
 
 class BackupRestoreThread(QThread):
 	error = Signal(str)
-	backup_success = Signal()
+	backup_success = Signal(str)
 	def __init__(self, func, options, parent=None):
 		super(BackupRestoreThread, self).__init__(parent)
 		self.func = func
@@ -355,12 +351,12 @@ class BackupRestoreThread(QThread):
 
 	def run(self):
 		try:
-			self.func(self.options, self.prog, True)
+			self.func(self.options, self.prog)
 		except Exception as e:
 			traceback.print_exc(e)
 			self.error.emit(e.__str__())
 			return
-		self.backup_success.emit()
+		self.backup_success.emit('\n'.join(self.prog.getLines()))
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
