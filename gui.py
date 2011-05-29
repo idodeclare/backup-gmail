@@ -7,6 +7,8 @@ Copyright 2011, Joseph Wen
  
 import sys
 import traceback
+import locale
+from datetime import datetime, date
 from PySide.QtCore import *
 from PySide.QtGui import *
 
@@ -20,6 +22,9 @@ def getGuiOptionParser():
 	return parser
  
 class MainWindow(QMainWindow):
+	GMAIL_DFMT = '%d-%b-%y'  # i.e., dd-MMM-yyyy
+	GMAIL_LOC = 'en_US'
+	
 	def __init__(self, parent=None):
 		super(MainWindow, self).__init__(parent)
 		self.setWindowTitle("Backup Gmail")
@@ -165,14 +170,16 @@ class MainWindow(QMainWindow):
 		self.keep_read.setChecked(options.keep_read == True)
 
 		if options.start_date != None:
+			dconv = DateConvert(self.GMAIL_LOC) 
 			self.start_date_enable.setChecked(True)
-			self.start_date.setDate(QDate.fromString(options.start_date, "dd-MMM-yyyy"))
+			self.start_date.setDate(dconv.fromString(options.start_date, self.GMAIL_DFMT))
 		else:
 			self.start_date_enable.setChecked(False)
 		
 		if options.end_date != None:
+			dconv = DateConvert(self.GMAIL_LOC) 
 			# options.end_date is exclusive, but UI is inclusive, so subtract 1 day
-			edate = QDate.fromString(options.end_date, "dd-MMM-yyyy").addDays(-1)
+			edate = dconv.fromString(options.end_date, self.GMAIL_DFMT).addDays(-1)
 			self.end_date_enable.setChecked(True)
 			self.end_date.setDate(edate)
 		else:
@@ -192,14 +199,17 @@ class MainWindow(QMainWindow):
 		options.password = self.pass_text.text()
 		options.backup_dir = self.backup_path.text()
 		options.keep_read = self.keep_read.isChecked()
+
 		if self.start_date_enable.isChecked():
-			options.start_date = self.start_date.date().toString("dd-MMM-yyyy")
+			dconv = DateConvert(self.GMAIL_LOC) 
+			options.start_date = dconv.toString(self.start_date.date(), self.GMAIL_DFMT)
 		else:
 			options.start_date = None
 		
 		if self.end_date_enable.isChecked():
+			dconv = DateConvert(self.GMAIL_LOC) 
 			# options.end_date is exclusive, so add 1 day
-			options.end_date = self.end_date.date().addDays(1).toString("dd-MMM-yyyy")
+			options.end_date = dconv.toString(self.end_date.date().addDays(1), self.GMAIL_DFMT)
 		else:
 			options.end_date = None
 		
@@ -310,6 +320,28 @@ class MainWindow(QMainWindow):
 		self.progress.setRange(self.t.prog.min, self.t.prog.max)
 		self.progress.setValue(self.t.prog.value)
 		self.progress.setLabelText(self.t.prog.getText())
+
+class DateConvert:
+	def __init__(self, locale):
+		self.locale = locale
+
+	def toString(self, qdate, format):
+		locale.setlocale(locale.LC_TIME, self.locale) 
+		try:
+			d = date(qdate.year(), qdate.month(), qdate.day())
+			return d.strftime(format)
+		finally:
+			locale.setlocale(locale.LC_TIME, '')
+
+	def fromString(self, date_string, format):
+		locale.setlocale(locale.LC_TIME, self.locale) 
+		try:
+			d = datetime.strptime(date_string, format)
+			qdate = QDate()
+			qdate.setDate(d.year, d.month, d.day)
+			return qdate
+		finally:
+			locale.setlocale(locale.LC_TIME, '')
 
 class GuiProgress:
 	def __init__(self):

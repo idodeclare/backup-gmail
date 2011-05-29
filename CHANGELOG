@@ -2,8 +2,8 @@ backup-gmail 0.2
   * Display more informative progress and completion messages
   * Use Gmail's XLIST command to map special folders
   * Full and incremental backup are now the same operation, and re-running
-    any backup will only write new messages ('label' is still always 
-    written fully after each backup). backup-gmail no longer deletes
+    any backup will only write newly-detected messages ('label' is still 
+    always written fully after each backup). backup-gmail no longer deletes
     any data
   * --mbox_export is now a separate optional operation, which can be done 
     on its own or after a backup
