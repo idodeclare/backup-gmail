@@ -219,7 +219,6 @@ class MainWindow(QMainWindow):
 				name += '.cfg'
 			print name
 			self.saveUI(self.config_file[self.current_profile])
-			self.config_file[self.current_profile].password = "" # don't save passwords 
 			backup_gmail.saveConfigFile(self.config_file, name)
 
 	def loadConfig(self):

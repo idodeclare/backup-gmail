@@ -559,7 +559,6 @@ def loadConfigFile(options, filename):
 	for section in config.sections():
 		result[section] = copy.copy(options)
 		result[section].username = config.get(section, 'username')
-		result[section].password = config.get(section, 'password')
 		result[section].backup_dir = config.get(section, 'backup_dir')
 		if config.has_option(section, 'keep_read'):
 			result[section].keep_read = config.getboolean(section, 'keep_read')
@@ -571,6 +570,8 @@ def loadConfigFile(options, filename):
 			result[section].include_labels = config.get(section, 'include_labels')
 		if config.has_option(section, 'exclude_labels'):
 			result[section].exclude_labels = config.get(section, 'exclude_labels')
+		if config.has_option(section, 'mbox_export'):
+			result[section].mbox_export = config.get(section, 'mbox_export')
 		if config.has_option(section, 'strict_exclude'):
 			result[section].strict_exclude = config.get(section, 'strict_exclude')
 	return result
@@ -585,13 +586,13 @@ def saveConfigFile(profiles, filename):
 		p = profiles[section]
 		config.add_section(section)
 		set_helper(config, section, 'username', p.username)
-		set_helper(config, section, 'password', p.password)
 		set_helper(config, section, 'backup_dir', p.backup_dir)
 		set_helper(config, section, 'keep_read', p.keep_read)
 		set_helper(config, section, 'start_date', p.start_date)
 		set_helper(config, section, 'end_date', p.end_date)
 		set_helper(config, section, 'include_labels', p.include_labels)
 		set_helper(config, section, 'exclude_labels', p.exclude_labels)
+		set_helper(config, section, 'mbox_export', p.mbox_export)
 		set_helper(config, section, 'strict_exclude', p.strict_exclude)
 	with open(filename, 'w') as f:
 		config.write(f)
