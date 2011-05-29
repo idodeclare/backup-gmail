@@ -143,6 +143,7 @@ class Gmail(object):
 			data = map(lambda x : (getUID(x), re.findall('RFC822.SIZE ([0-9]+)', x)[0], re.search("Seen", x) != None), data)
 		return data
 
+	# start is inclusive, end is exclusive
 	def searchByDate(self, start, end = None):
 		if start == None and end == None:
 			ret, result = self.gmail.search(None, 'ALL')
@@ -162,24 +163,16 @@ class Gmail(object):
 		xlist = self.gmail.response('XLIST')[1]
 		xlabels = {}
 		for x in xlist:
-			m = re.match('\(([^\)]+)\) "/" "([^"]+)"', x)
+			m = re.match(r'\(([^\)]+)\) "/" "([^"]+)"', x)
 			if m is None:
 				continue
 			attrbs = set(m.group(1).split())
 			label = m.group(2)
-			
-			if '\\Inbox' in attrbs:
-				xlabels['Inbox'] = label
-			elif '\\AllMail' in attrbs:    # no space 
-				xlabels['AllMail'] = label
-			elif '\\Drafts' in attrbs:
-				xlabels['Drafts'] = label
-			elif '\\Sent' in attrbs:
-				xlabels['Sent'] = label
-			elif '\\Starred' in attrbs:
-				xlabels['Starred'] = label
-			elif '\\Trash' in attrbs:
-				xlabels['Trash'] = label
+
+			for k in ['Inbox', 'AllMail', 'Drafts', 'Sent', 'Starred', 'Trash' ]:
+				attr = '\\' + k
+				if attr in attrbs:
+					xlabels[k] = label
 		return xlabels
 
 	def fetchLabelNames(self):
@@ -609,8 +602,8 @@ def getOptionParser():
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to online gmail account")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
 	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status (Slow)")
-	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date. Format: 30-Jan-2010")
-	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date Format: 30-Jan-2010")
+	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: 30-Jan-2010")
+	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: 30-Jan-2010")
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
