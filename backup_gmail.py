@@ -10,6 +10,7 @@ import imaplib
 import traceback
 import email.message, email.utils
 import re, sys, hashlib, os, shutil, time, optparse, mailbox, copy
+import locale
 from datetime import datetime
 import ConfigParser
 
@@ -151,13 +152,17 @@ class Gmail(object):
 			ret, result = self.gmail.search(None, 'ALL')
 			return result[0].split()
 		elif end == None:
-			ret, result = self.gmail.search(None, '(SINCE "%s")' % (start, ))
+			gstart = GmailDate.fromLocal(start)
+			ret, result = self.gmail.search(None, '(SINCE "%s")' % (gstart, ))
 			return result[0].split()
 		elif start == None:
-			ret, result = self.gmail.search(None, '(BEFORE "%s")' % (end, ))
+			gend = GmailDate.fromLocal(end)
+			ret, result = self.gmail.search(None, '(BEFORE "%s")' % (gend, ))
 			return result[0].split()
 		else:
-			ret, result = self.gmail.search(None, '(SINCE "%s") (BEFORE "%s")' % (start, end))
+			gstart = GmailDate.fromLocal(start)
+			gend = GmailDate.fromLocal(end)
+			ret, result = self.gmail.search(None, '(SINCE "%s") (BEFORE "%s")' % (gstart, gend))
 			return result[0].split()
 
 	def fetchSpecialLabels(self):
@@ -404,9 +409,9 @@ class BackupGmail(Gmail):
 		self.checkDir()
 
 	def backupTo(self, date_range = None, include_labels = None, exclude_labels = []):
+		self.login()
 		self.makeDir()
 		self.readLabelFile()
-		self.login()
 
 		try:
 			if include_labels == None:
@@ -572,6 +577,30 @@ class TerminalProgress:
 		self.maxWidth = 0
 		print 
 
+class GmailDate:
+	GMAIL_DFMT = '%d-%b-%Y'  # i.e., dd-MMM-yyyy
+	GMAIL_LOC = 'en_US'
+
+	@classmethod
+	def toLocal(cls, gmail_date, format=GMAIL_DFMT):
+		currlang, encoding = locale.getlocale(locale.LC_TIME)
+		locale.setlocale(locale.LC_TIME, cls.GMAIL_LOC) 
+		try:
+			d = datetime.strptime(gmail_date, cls.GMAIL_DFMT)
+		finally:
+			locale.setlocale(locale.LC_TIME, currlang)
+		return d.strftime(format)
+
+	@classmethod
+	def fromLocal(cls, date_string, format=GMAIL_DFMT):
+		d = datetime.strptime(date_string, format)
+		currlang, encoding = locale.getlocale(locale.LC_TIME)
+		locale.setlocale(locale.LC_TIME, cls.GMAIL_LOC) 
+		try:
+			return d.strftime(cls.GMAIL_DFMT)
+		finally:
+			locale.setlocale(locale.LC_TIME, currlang)
+
 class KeyringUtil:
 	def __init__(self, service_template):
 		self.service_template = service_template
@@ -656,8 +685,8 @@ def getOptionParser():
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to online gmail account")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
 	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status (Slow)")
-	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: 30-Jan-2010")
-	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: 30-Jan-2010")
+	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy")
+	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: dd-MMM-yyyy")
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
