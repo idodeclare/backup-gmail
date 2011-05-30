@@ -350,13 +350,14 @@ class GuiProgress:
 		self.value = 0
 		self.text = ""
 		self.lines = []
+		self.formatter = self.justString
 
 	def setRange(self, a, b):
 		self.min = a
-		self.max = int(b / 1000.0)
+		self.max = b
 
 	def setValue(self, value):
-		self.value = int(value / 1000.0)
+		self.value = value
 
 	def setText(self, text):
 		self.text = text
@@ -366,12 +367,15 @@ class GuiProgress:
 		return
 
 	def getLines(self):
-		return self.lines;
+		return self.lines
+
+	def justString(self, value):
+		return str(value)
 
 	def getText(self):
-		tmp = self.text.replace("@max", str(self.max))
-		tmp = tmp.replace("@min", str(self.min))
-		tmp = tmp.replace("@value", str(self.value))
+		tmp = self.text.replace("@max", self.formatter(self.max))
+		tmp = tmp.replace("@min", self.formatter(self.min))
+		tmp = tmp.replace("@value", self.formatter(self.value))
 		return tmp
 
 class BackupRestoreThread(QThread):

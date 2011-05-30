@@ -255,8 +255,13 @@ class BackupGmail(Gmail):
 		self.fetchEnd = '-1'
 		self.fetchSize = 0
 
+	def formatMegabytes(self, v):
+		v /= 1000000.0
+		return '%.2f MB' % (v,)
+
 	def __initProgress(self, infos):
 		total = sum(map(lambda x:int(x[1]), infos))
+		self.progress.formatter = self.formatMegabytes
 		self.progress.setRange(0, total)
 		self.progress.setValue(0)
 
@@ -435,8 +440,9 @@ class SaveMbox(Gmail):
 		if not os.path.exists(odir):
 			os.mkdir(odir)
 
+		ntotal = len(self.mails)
 		self.progress.setText("Processing messages to mbox(es) [@value/@max]")
-		self.progress.setRange(0, len(self.mails))
+		self.progress.setRange(0, ntotal)
 
 		nsaved = 0
 		for i, m in enumerate(self.mails.values()):
@@ -463,8 +469,7 @@ class SaveMbox(Gmail):
 		for i, m in enumerate(self.mboxs.values()):
 			m.flush()
 
-		self.progress.setValue(nsaved)
-		self.progress.setText("Saved @value of @max message(s) to mbox(es)")
+		self.progress.setText("Saved %d of %d message(s) to mbox(es)" % (nsaved, ntotal))
 		self.progress.newLine()
 		
 class RestoreGmail(Gmail):
@@ -493,8 +498,9 @@ class RestoreGmail(Gmail):
 		self.readLabelFile()
 		self.labels = set(self.fetchLabelNames())
 
+		ntotal = len(self.mails)
 		self.progress.setText("Processing messages for restore [@value/@max]")
-		self.progress.setRange(0, len(self.mails))
+		self.progress.setRange(0, ntotal)
 		
 		specials = self.fetchSpecialLabels()
 		allMail = specials['AllMail']    # no space
@@ -523,8 +529,7 @@ class RestoreGmail(Gmail):
 					if label != allMail:
 						self.__assignLabel(uid, label)
 
-		self.progress.setValue(nrestored)
-		self.progress.setText("Restored @value of @max message(s).")
+		self.progress.setText("Restored %d of %d message(s)." % (nrestored, ntotal))
 		self.progress.newLine()
 	
 class TerminalProgress:
@@ -532,6 +537,11 @@ class TerminalProgress:
 		self.value = 0
 		self.min = 0
 		self.max = 0
+		self.maxWidth = 0
+		self.formatter = self.justString
+
+	def justString(self, v):
+		return str(v)
 
 	def setRange(self, a, b):
 		self.min = a
@@ -548,17 +558,18 @@ class TerminalProgress:
 	
 	def update(self):
 		x = self.text
-		x = x.replace('@value', str(self.value))
-		x = x.replace('@max', str(self.max))
+		x = x.replace('@value', self.formatter(self.value))
+		x = x.replace('@max', self.formatter(self.max))
 		xlen = len(x)
-		if xlen > 80:
-			x = x[0:79]
-		elif xlen < 80:
-			x = x + ' ' * (80 - xlen)
+		if xlen < self.maxWidth:
+			x = x + ' ' * (self.maxWidth - xlen)
+		else:
+			self.maxWidth = xlen
 		print '\r%s\r' % (x, ),
 		sys.stdout.flush()
 		
 	def newLine(self):
+		self.maxWidth = 0
 		print 
 
 class KeyringUtil:
