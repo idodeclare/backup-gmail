@@ -22,7 +22,7 @@ def getGuiOptionParser():
 	return parser
  
 class MainWindow(QMainWindow):
-	GMAIL_DFMT = '%d-%b-%y'  # i.e., dd-MMM-yyyy
+	GMAIL_DFMT = '%d-%b-%Y'  # i.e., dd-MMM-yyyy
 	GMAIL_LOC = 'en_US'
 	
 	def __init__(self, parent=None):

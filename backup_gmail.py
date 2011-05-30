@@ -13,6 +13,8 @@ import re, sys, hashlib, os, shutil, time, optparse, mailbox, copy
 from datetime import datetime
 import ConfigParser
 
+KC_SERVICE_TEMPLATE = 'backup_gmail (%s)'
+
 class MailMetaData:
 	@classmethod
 	def fromStr(cls, s):
@@ -436,6 +438,7 @@ class SaveMbox(Gmail):
 		self.progress.setText("Processing messages to mbox(es) [@value/@max]")
 		self.progress.setRange(0, len(self.mails))
 
+		nsaved = 0
 		for i, m in enumerate(self.mails.values()):
 			self.progress.setValue(i + 1)
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
@@ -455,11 +458,13 @@ class SaveMbox(Gmail):
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
 					self.__addToMBox(label, mail)
+				nsaved += 1
 
 		for i, m in enumerate(self.mboxs.values()):
 			m.flush()
 
-		self.progress.setText("Processed @values message(s) to mbox(es)")
+		self.progress.setValue(nsaved)
+		self.progress.setText("Saved @value of @max message(s) to mbox(es)")
 		self.progress.newLine()
 		
 class RestoreGmail(Gmail):
@@ -494,6 +499,7 @@ class RestoreGmail(Gmail):
 		specials = self.fetchSpecialLabels()
 		allMail = specials['AllMail']    # no space
 
+		nrestored = 0
 		mail_count = self.selectMailBox('INBOX')
 		for i, m in enumerate(self.mails.values()):
 			self.progress.setValue(i + 1)
@@ -506,17 +512,20 @@ class RestoreGmail(Gmail):
 			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
+				dateTuple = email.utils.parsedate(e.get('date'))
 				if date_range is not None:
-					dateTuple = email.utils.parsedate(e.get('date'))
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
-				uid = self.__appendMessage(mail, date, 'INBOX')
+				uid = self.__appendMessage(mail, dateTuple, 'INBOX')
+				nrestored += 1
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
 					if label != allMail:
 						self.__assignLabel(uid, label)
 
-		self.progress.setText("Processed @value message(s) for restore")
+		self.progress.setValue(nrestored)
+		self.progress.setText("Restored @value of @max message(s).")
+		self.progress.newLine()
 	
 class TerminalProgress:
 	def __init__(self):
@@ -553,9 +562,8 @@ class TerminalProgress:
 		print 
 
 class KeyringUtil:
-	KC_SERVICE_TEMPLATE = 'backup_gmail (%s)'
-	
-	def __init__(self):
+	def __init__(self, service_template):
+		self.service_template = service_template
 		try:
 			import keyring
 		except ImportError:
@@ -566,11 +574,11 @@ class KeyringUtil:
 			self.set_password_function = keyring.set_password
 
 	def get_password(self, username):
-		servicename = self.KC_SERVICE_TEMPLATE % (username, )
+		servicename = self.service_template % (username, )
 		return self.get_password_function(servicename, username)
 
 	def set_password(self, username, password):
-		servicename = self.KC_SERVICE_TEMPLATE % (username, )
+		servicename = self.service_template % (username, )
 		self.set_password_function(servicename, username, password)
 
 	def __noop_get_password(self, servicename, username):
@@ -582,7 +590,7 @@ class KeyringUtil:
 def loadConfigFile(options, filename):
 	config = ConfigParser.SafeConfigParser()
 	config.read([filename, os.path.expanduser('~/.backup_gmail.cfg')])
-	keyu = KeyringUtil()
+	keyu = KeyringUtil(KC_SERVICE_TEMPLATE)
 	result = {}
 	for section in config.sections():
 		rsec = result[section] = copy.copy(options)
@@ -611,7 +619,7 @@ def saveConfigFile(profiles, filename):
 		if value == None:
 			return
 		return cfg.set(section, option, str(value))
-	keyu = KeyringUtil()
+	keyu = KeyringUtil(KC_SERVICE_TEMPLATE)
 	config = ConfigParser.SafeConfigParser()
 	for section in profiles:
 		p = profiles[section]
