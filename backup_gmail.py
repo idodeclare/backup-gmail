@@ -254,6 +254,7 @@ class BackupGmail(Gmail):
 		self.dest = dest
 		self.strict_exclude = False
 		self.exclude_mids = set()
+		self.written = {}
 
 		self.fetchBuffer = []
 		self.fetchStart = '-1'
@@ -309,7 +310,6 @@ class BackupGmail(Gmail):
 		self.__flushFetchMailRequest()
 
 		self.progress.setText("Fetched %s [@value/@max]" % (label, ))
-		self.progress.setValue(total)
 		self.progress.newLine()
 
 	def __processMail(self, rfc, seen, label):
@@ -319,6 +319,7 @@ class BackupGmail(Gmail):
 			fold = "Date-Unknown"
 		else:
 			fold = time.strftime("%Y-%m", date)
+
 		h = hashlib.sha256(rfc).hexdigest()
 		mid = mail.get('message-id')
 		if mid == None: 
@@ -338,6 +339,7 @@ class BackupGmail(Gmail):
 					f.close()
 					os.remove(mfile)
 					raise
+			self.written[mid] = h
 
 		if mid not in self.mails:
 			self.mails[mid] = MailMetaData(mid, h, fold)
@@ -388,6 +390,7 @@ class BackupGmail(Gmail):
 		return labels
 
 	def __fetchByLabels(self, date_range, include_labels, exclude_labels):
+		self.written = {}
 		self.exclude_mids = set()
 		if self.strict_exclude:
 			for l in filter(lambda x : x in exclude_labels, self.fetchLabelNames()):
@@ -397,6 +400,9 @@ class BackupGmail(Gmail):
 		
 		for l in set(include_labels).difference(set(exclude_labels)):
 			self.__fetchMailByLabel(l, date_range)
+			
+		self.progress.setText("Backed up %d physical message(s)." % (len(self.written), ))
+		self.progress.newLine()
 	
 	def __outputLable(self):
 		with open(self.dest + '/label', 'w') as f:
