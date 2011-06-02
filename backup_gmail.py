@@ -686,7 +686,10 @@ def saveConfigFile(profiles, filename):
 		config.write(f)
 
 def getOptionParser():
-	parser = optparse.OptionParser(usage = "%prog backup_dir [email@address password]")
+	parser = optparse.OptionParser(usage = "%prog [options] [backup_dir email@address password]")
+	parser.add_option("--dest", dest="backup_dir", action="store", help="Backup destination")
+	parser.add_option("--user", dest="username", action="store", help = "Gmail email@address")
+	parser.add_option("--password", dest="password", action="store", help = "Gmail password")
 	parser.add_option("-P", "--prompt", dest="prompt", action="store_true", default = False, help = "Prompt for Gmail credentials")
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to online gmail account")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
@@ -736,17 +739,15 @@ if __name__ == '__main__':
 	parser = getOptionParser()
 	(options, args) = parser.parse_args()
 	
-	if len(args) < 1:
-		parser.print_help()
-		exit()
-	options.backup_dir = args[0]
-
 	if options.config_file != None:
 		options = loadConfigFile(options, options.config_file)[options.profile]
 
-	options.username = None
-	options.password = None
-	
+	if len(args) >= 1:
+		options.backup_dir = args[0]
+	elif options.backup_dir is None:
+		parser.print_help()
+		exit()
+
 	if len(args) >= 2:
 		options.username = args[1]
 	if len(args) >= 3:

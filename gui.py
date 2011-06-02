@@ -15,9 +15,6 @@ import backup_gmail
 
 def getGuiOptionParser():
 	parser = backup_gmail.getOptionParser()
-	parser.add_option("--user", dest="username", action="store", help = "Gmail account name")
-	parser.add_option("--password", dest="password", action="store", help = "Gmail account password")
-	parser.add_option("--dest", dest="backup_dir", action="store", help = "Backup destination")
 	return parser
  
 class MainWindow(QMainWindow):
