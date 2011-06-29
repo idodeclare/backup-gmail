@@ -64,6 +64,7 @@ class MainWindow(QMainWindow):
 		self.include_label = QRadioButton("Include")
 		self.include_label.setChecked(True)
 		self.exclude_label = QRadioButton("Exclude")
+		self.strict_exclude = QRadioButton("Exclude (Strict)")
 		self.label_filter_text = QLineEdit()
 		self.label_filter_text.setPlaceholderText("Keep empty to fetch all labels")
 
@@ -97,6 +98,7 @@ class MainWindow(QMainWindow):
 		vTmp = QVBoxLayout()
 		vTmp.addWidget(self.include_label)
 		vTmp.addWidget(self.exclude_label)
+		vTmp.addWidget(self.strict_exclude)
 		layout.addLayout(vTmp, 5, 2)
 
 		layout.addWidget(self.backup_label, 6, 0)
@@ -180,8 +182,11 @@ class MainWindow(QMainWindow):
 			self.include_label.setChecked(True)
 			self.label_filter_text.setText(options.include_labels)
 		elif options.exclude_labels != None:
-			self.exclude_label.setChecked(True)
-			self.label_filter_text.setText(options.exclude_labels)
+		  if options.strict_exclude:
+		    self.strict_exclude.setChecked(True)
+		  else:
+			  self.exclude_label.setChecked(True)
+		  self.label_filter_text.setText(options.exclude_labels)
 		else:
 			self.label_filter_text.setText("")
 
@@ -209,6 +214,7 @@ class MainWindow(QMainWindow):
 				options.include_labels = self.label_filter_text.text()
 			else:
 				options.exclude_labels = self.label_filter_text.text()
+				options.strict_exclude = self.strict_exclude.isChecked()
 
 	def storeConfig(self):
 		name = QFileDialog.getSaveFileName(self, "Open File", ".", "Config (*.cfg)")

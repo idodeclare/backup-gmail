@@ -655,7 +655,7 @@ def loadConfigFile(options, filename):
 		if config.has_option(section, 'mbox_export'):
 			rsec.mbox_export = config.get(section, 'mbox_export')
 		if config.has_option(section, 'strict_exclude'):
-			rsec.strict_exclude = config.get(section, 'strict_exclude')
+			rsec.strict_exclude = config.getboolean(section, 'strict_exclude')
 		if rsec.username is not None and len(rsec.username):
 			rsec.password = keyu.get_password(rsec.username)
 	return result
