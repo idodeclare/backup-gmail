@@ -249,41 +249,58 @@ class MainWindow(QMainWindow):
 		self.restore_btn.setDisabled(True)
 		self.backup_btn.setDisabled(True)
 		
-		self.t = BackupRestoreThread(backup_gmail.doBackup, self.config_file[self.current_profile])
-		self.t.finished.connect(self.backup_restore_finished)
-		self.t.error.connect(self.show_error)
-		self.t.backup_success.connect(self.show_backup_success)
-		self.t.start()
-		self.timer = QTimer(self)
-		self.timer.timeout.connect(self.update_progress)
-		self.timer.start(1000)
-
 		self.progress = QProgressDialog(self)
 		self.progress.setAutoClose(False)
 		self.progress.setWindowModality(Qt.WindowModal)
 		self.progress.setWindowTitle("Backup from %s" % (self.user_text.text(), ))
 		self.progress.setLabelText(" " * 100)
+		self.progress.canceled.connect(self.cancel_operation)
+
+		self.t = BackupRestoreThread(self.getBackerup, self.config_file[self.current_profile])
+		self.t.finished.connect(self.backup_restore_finished)
+		self.t.error.connect(self.show_error)
+		self.t.backup_success.connect(self.show_backup_success)
+
+		self.timer = QTimer(self)
+		self.timer.timeout.connect(self.update_progress)
+
+		self.t.start()
+		self.timer.start(1000)
 		self.progress.show()
+	
+	def getBackerup(self, options, progress):
+		return backup_gmail.BackupGmail(options, progress)
 	
 	def restore(self):
 		self.restore_btn.setDisabled(True)
 		self.backup_btn.setDisabled(True)
 		self.saveUI(self.config_file[self.current_profile])
-		self.t = BackupRestoreThread(backup_gmail.doRestore, self.config_file[self.current_profile])
-		self.t.finished.connect(self.backup_restore_finished)
-		self.t.error.connect(self.show_error)
-		self.t.backup_success.connect(self.show_restore_success)
-		self.t.start()
-		self.timer = QTimer(self)
-		self.timer.timeout.connect(self.update_progress)
-		self.timer.start(1000)
 
 		self.progress = QProgressDialog(self)
 		self.progress.setAutoClose(False)
 		self.progress.setWindowModality(Qt.WindowModal)
 		self.progress.setWindowTitle("Restore to %s" % (self.user_text.text(), ))
 		self.progress.setLabelText(" " * 100)
+		self.progress.canceled.connect(self.cancel_operation)
+
+		self.t = BackupRestoreThread(self.getRestorer, self.config_file[self.current_profile])
+		self.t.finished.connect(self.backup_restore_finished)
+		self.t.error.connect(self.show_error)
+		self.t.backup_success.connect(self.show_restore_success)
+
+		self.timer = QTimer(self)
+		self.timer.timeout.connect(self.update_progress)
+
+		self.t.start()
+		self.timer.start(1000)
 		self.progress.show()
+		
+	def getRestorer(self, options, progress):
+		return backup_gmail.RestoreGmail(options, progress)
+		
+	def cancel_operation(self):
+		if self.t.gobj is not None:
+			self.t.gobj.cancel()
 
 	def show_error(self, message):
 		msgBox = QMessageBox()
@@ -294,14 +311,14 @@ class MainWindow(QMainWindow):
 	
 	def show_backup_success(self, progress):
 		msgBox = QMessageBox()
-		msgBox.setText("The backup was successful.")
+		msgBox.setText("The backup finished with no errors.")
 		msgBox.setIcon(QMessageBox.Information)
 		msgBox.setInformativeText(progress)
 		msgBox.exec_()
 	
 	def show_restore_success(self, progress):
 		msgBox = QMessageBox()
-		msgBox.setText("The restore was successful")
+		msgBox.setText("The restore finished with no errors.")
 		msgBox.setIcon(QMessageBox.Information)
 		msgBox.setInformativeText(progress)
 		msgBox.exec_()
@@ -359,10 +376,12 @@ class BackupRestoreThread(QThread):
 		self.func = func
 		self.options = options
 		self.prog = GuiProgress()
+		self.gobj = None
 
 	def run(self):
 		try:
-			self.func(self.options, self.prog)
+			self.gobj = self.func(self.options, self.prog)
+			self.gobj.execute()
 		except Exception as e:
 			traceback.print_exc(e)
 			self.error.emit(e.__str__())

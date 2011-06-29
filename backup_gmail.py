@@ -97,19 +97,23 @@ class Gmail(object):
 		def __str__(self):
 			return repr(self.str)
 
-	def __init__(self, username, password):
+	def __init__(self, options, progress = None):
+		self.options = options
+		self.progress = progress
 		self.mails = {}
 		self.mboxs = {}
 		self.labels = set()
 		self.gmail = None
-		self.username = username
-		self.password = password
+		self.canceling = False
+		
+	def cancel(self):
+	  self.canceling = True
 
 	def login(self):
 		self.gmail_prefix = None
 		self.gmail = imaplib.IMAP4_SSL('imap.gmail.com', 993)
 		try:
-			ret, message = self.gmail.login(self.username, self.password)
+			ret, message = self.gmail.login(self.options.username, self.options.password)
 		except Exception as e:
 			raise self.AuthError("username or password incorrect")
 		
@@ -208,11 +212,11 @@ class Gmail(object):
 		return self.gmail_prefix
 
 	def checkDir(self):		
-		if not os.path.isdir(self.dest):
-			raise ApplicationError('Error: [%s] is not a directory!\n' % (self.dest, ))
+		if not os.path.isdir(self.options.backup_dir):
+			raise ApplicationError('Error: [%s] is not a directory!\n' % (self.options.backup_dir, ))
 
 	def readLabelFile(self):
-		labelFile = "%s/label" % (self.dest, )
+		labelFile = "%s/label" % (self.options.backup_dir, )
 		if os.path.exists(labelFile):
 			with open(labelFile) as f:
 				for line in f.readlines():
@@ -247,12 +251,8 @@ class Gmail(object):
 		self.gmail.store(uid, '-Flags', flag)
 
 class BackupGmail(Gmail):
-	def __init__(self, username, password, dest, progress = None):
-		super(BackupGmail, self).__init__(username, password)
-		self.keep_read_status = False
-		self.progress = progress
-		self.dest = dest
-		self.strict_exclude = False
+	def __init__(self, options, progress = None):
+		super(BackupGmail, self).__init__(options, progress)
 		self.exclude_mids = set()
 		self.written = {}
 
@@ -294,6 +294,8 @@ class BackupGmail(Gmail):
 		total = 0
 
 		for i, (env, info) in enumerate(zip(envs, infos)):
+			if self.canceling:
+			  break
 			uid, mid = env
 			uid, size, seen = info
 			if mid not in self.mails:
@@ -301,7 +303,7 @@ class BackupGmail(Gmail):
 					self.__fetchMail(uid, seen, label, size)
 			else:
 				self.mails[mid].labels.add(label)
-				if seen == False and self.keep_read_status:
+				if seen == False and self.options.keep_read:
 					self.unsetFlag(uid, '\\Seen')
 			total += int(size)
 			self.progress.setValue(total)
@@ -325,11 +327,11 @@ class BackupGmail(Gmail):
 		if mid == None: 
 			mid = "<%s@backupgmail.com>" % (h, )
 
-		mdir = "%s/%s" % (self.dest, fold)
+		mdir = "%s/%s" % (self.options.backup_dir, fold)
 		if not os.path.isdir(mdir):
 			os.mkdir(mdir)
 
-		mfile = "%s/%s/%s" % (self.dest, fold, h)
+		mfile = "%s/%s/%s" % (self.options.backup_dir, fold, h)
 		if not os.path.exists(mfile):
 			with open(mfile, 'w') as f:
 				try:
@@ -352,7 +354,7 @@ class BackupGmail(Gmail):
 			return
 
 		rfcs = self.fetchRFC822('%s:%s' % (self.fetchStart, self.fetchEnd))
-		if self.keep_read_status:
+		if self.options.keep_read:
 			for i, rfc in enumerate(rfcs):
 				if self.fetchBuffer[i][0] == False:
 					self.unsetFlag(rfc[0], '\\Seen')
@@ -392,29 +394,41 @@ class BackupGmail(Gmail):
 	def __fetchByLabels(self, date_range, include_labels, exclude_labels):
 		self.written = {}
 		self.exclude_mids = set()
-		if self.strict_exclude:
+		if self.options.strict_exclude:
 			for l in filter(lambda x : x in exclude_labels, self.fetchLabelNames()):
 				mail_count = self.selectMailBox(l)
 				tmp = set(map(lambda x:x[1], self.fetchMessageId("1:%s" % (mail_count[0], ))))
 				self.exclude_mids.update(tmp)
 		
 		for l in set(include_labels).difference(set(exclude_labels)):
+			if self.canceling:
+				self.progress.setText("Backup was canceled by user.")
+				self.progress.newLine()
+				break;
 			self.__fetchMailByLabel(l, date_range)
 			
 		self.progress.setText("Backed up %d physical message(s)." % (len(self.written), ))
 		self.progress.newLine()
 	
 	def __outputLable(self):
-		with open(self.dest + '/label', 'w') as f:
+		with open(self.options.backup_dir + '/label', 'w') as f:
 			for k in self.mails:
 				print >> f, self.mails[k]
 
 	def makeDir(self):
-		if not os.path.exists(self.dest):
-			os.mkdir(self.dest)
+		if not os.path.exists(self.options.backup_dir):
+			os.mkdir(self.options.backup_dir)
 		self.checkDir()
 
-	def backupTo(self, date_range = None, include_labels = None, exclude_labels = []):
+	def execute(self):
+		date_range = [self.options.start_date, self.options.end_date]		
+		include_labels = None
+		exclude_labels = []
+		if self.options.include_labels is not None:
+			include_labels = self.options.include_labels.split('^')
+		if self.options.exclude_labels is not None:
+			exclude_labels = self.options.exclude_labels.split('^')
+
 		self.login()
 		self.makeDir()
 		self.readLabelFile()
@@ -427,36 +441,46 @@ class BackupGmail(Gmail):
 			self.__fetchByLabels(date_range, include_labels, exclude_labels)
 		finally:
 			self.__outputLable()
+			self.canceling = False
 
 class SaveMbox(Gmail):
-	def __init__(self, src, mbox_export, progress):
-		super(SaveMbox, self).__init__(None, None)
-		self.progress = progress
-		self.dest = src
-		self.mbox_export = mbox_export
+	def __init__(self, options, progress):
+		super(SaveMbox, self).__init__(options, progress)
 
 	def __addToMBox(self, label, mail):
 		if label not in self.mboxs:
-			odir = os.path.expanduser(self.mbox_export)
+			odir = os.path.expanduser(self.options.mbox_export)
 			self.mboxs[label] = mailbox.mbox('%s/%s.mbox' % (odir, label.replace('/', '-'), ), create = True)
 			self.mboxs[label].clear()
 			self.mboxs[label].flush()
 		self.mboxs[label].add(mail)
 
-	def save(self, date_range = None, include_labels = None, exclude_labels = None):
+	def execute(self):
+		date_range = [self.options.start_date, self.options.end_date]		
+		include_labels = None
+		exclude_labels = []
+		if self.options.include_labels is not None:
+			include_labels = self.options.include_labels.split('^')
+		if self.options.exclude_labels is not None:
+			exclude_labels = self.options.exclude_labels.split('^')
+
 		self.checkDir()
 		self.readLabelFile()
 
-		odir = os.path.expanduser(self.mbox_export)
+		odir = os.path.expanduser(self.options.mbox_export)
 		if not os.path.exists(odir):
 			os.mkdir(odir)
 
 		ntotal = len(self.mails)
-		self.progress.setText("Processing messages to mbox(es) [@value/@max]")
+		self.progress.setText("Exporting messages to mbox(es) [@value/@max]")
 		self.progress.setRange(0, ntotal)
 
 		nsaved = 0
 		for i, m in enumerate(self.mails.values()):
+			if self.canceling:
+			  self.progress.setText('Export was canceled by user.')
+			  self.progress.newLine()
+			  break
 			self.progress.setValue(i + 1)
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
 			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
@@ -464,7 +488,7 @@ class SaveMbox(Gmail):
 				continue
 			if exclude_labels != None and exclude != set():
 				continue
-			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
+			with open("%s/%s/%s" % (self.options.backup_dir, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
 				if date_range is not None:
@@ -480,14 +504,13 @@ class SaveMbox(Gmail):
 		for i, m in enumerate(self.mboxs.values()):
 			m.flush()
 
-		self.progress.setText("Saved %d of %d message(s) to mbox(es)" % (nsaved, ntotal))
+		self.progress.setText("Exported %d of %d message(s) to mbox(es)" % (nsaved, ntotal))
 		self.progress.newLine()
-		
+		self.canceling = False
+
 class RestoreGmail(Gmail):
-	def __init__(self, username, password, src, progress):
-		super(RestoreGmail, self).__init__(username, password)
-		self.progress = progress
-		self.dest = src
+	def __init__(self, options, progress):
+		super(RestoreGmail, self).__init__(options, progress)
 
 	def __appendMessage(self, message, date, mailbox = None):
 		ret, msg = self.gmail.append(mailbox, None, date, message)
@@ -499,7 +522,15 @@ class RestoreGmail(Gmail):
 			self.labels = set(self.fetchLabelNames())
 		ret, msg = self.gmail.uid('COPY', uid, label)
 	
-	def restore(self, date_range = None, include_labels = None, exclude_labels = None):
+	def execute(self):
+		date_range = [self.options.start_date, self.options.end_date]		
+		include_labels = None
+		exclude_labels = []
+		if self.options.include_labels is not None:
+			include_labels = self.options.include_labels.split('^')
+		if self.options.exclude_labels is not None:
+			exclude_labels = self.options.exclude_labels.split('^')
+
 		self.checkDir()
 		self.login()
 
@@ -519,6 +550,10 @@ class RestoreGmail(Gmail):
 		nrestored = 0
 		mail_count = self.selectMailBox('INBOX')
 		for i, m in enumerate(self.mails.values()):
+			if self.canceling:
+				self.progress.setText("Restore was canceled by user.")
+				self.progress.newLine()
+				break
 			self.progress.setValue(i + 1)
 			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
 			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
@@ -526,7 +561,7 @@ class RestoreGmail(Gmail):
 				continue
 			if exclude_labels != None and exclude != set():
 				continue
-			with open("%s/%s/%s" % (self.dest, m.folder, m.hash_value)) as f:
+			with open("%s/%s/%s" % (self.options.backup_dir, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
 				dateTuple = email.utils.parsedate(e.get('date'))
@@ -542,6 +577,7 @@ class RestoreGmail(Gmail):
 
 		self.progress.setText("Restored %d of %d message(s)." % (nrestored, ntotal))
 		self.progress.newLine()
+		self.canceling = False
 	
 class TerminalProgress:
 	def __init__(self):
@@ -703,38 +739,6 @@ def getOptionParser():
 	parser.add_option("-p", "--profile", dest="profile", action="store", default = "Main", help = "Use this profile in the config file.")
 	return parser
 
-def doBackup(options, progress):
-	include_labels = exclude_labels = None
-	if options.include_labels != None:
-		include_labels = options.include_labels.split('^')
-	if options.exclude_labels != None:
-		exclude_labels = options.exclude_labels.split('^')
-	
-	backup = BackupGmail(options.username, options.password, options.backup_dir, progress)
-	backup.strict_exclude = options.strict_exclude
-	backup.keep_read_status = options.keep_read
-	backup.backupTo([options.start_date, options.end_date], include_labels, exclude_labels)
-
-def doRestore(options, progress):
-	include_labels = exclude_labels = None
-	if options.include_labels != None:
-		include_labels = options.include_labels.split('^')
-	if options.exclude_labels != None:
-		exclude_labels = options.exclude_labels.split('^')
-	
-	restore = RestoreGmail(options.username, options.password, options.backup_dir, progress)
-	restore.restore([options.start_date, options.end_date], include_labels, exclude_labels)
-
-def doMbox(options, progress):
-	include_labels = exclude_labels = None
-	if options.include_labels != None:
-		include_labels = options.include_labels.split('^')
-	if options.exclude_labels != None:
-		exclude_labels = options.exclude_labels.split('^')
-	
-	savem = SaveMbox(options.backup_dir, options.mbox_export, progress)
-	savem.save([options.start_date, options.end_date], include_labels, exclude_labels)
-
 if __name__ == '__main__':
 	parser = getOptionParser()
 	(options, args) = parser.parse_args()
@@ -767,12 +771,15 @@ if __name__ == '__main__':
 		if canConnect == False:
 			pass
 		elif options.restore == True:
-			doRestore(options, TerminalProgress())
+			grestore = RestoreGmail(options, TerminalProgress())
+			grestore.execute()
 		else:
-			doBackup(options, TerminalProgress())
+			gbackup = BackupGmail(options, TerminalProgress())
+			gbackup.execute()
 			
 		if options.mbox_export is not None:
-			doMbox(options, TerminalProgress())
+			gmbox = SaveMbox(options, TerminalProgress())
+			gmbox.execute()
 	except Exception as e:
 		traceback.print_exc(e)
 		exit()
