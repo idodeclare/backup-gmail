@@ -1,25 +1,39 @@
 backup-gmail 0.2
-  * Display more informative progress and completion messages
-  * Use Gmail's XLIST command to map special folders
   * Full and incremental backup are now the same operation, and re-running
-    any backup will only write newly-detected messages ('label' is still 
-    always written fully after each backup). backup-gmail no longer deletes
-    any data
-  * --mbox_export is now a separate optional operation, which can be done 
-    on its own or after a backup
-  * Messages without MESSAGE-ID still get a hash@backup-gmail.com id, but
-    the RFC content is no longer touched
+	any backup will only write newly-detected messages ('label' is still
+	always written fully after each backup). backup-gmail no longer deletes
+	any data
+  * add KeyringUtil to use keyring library (if available at runtime)
+	for secure handling of saved passwords instead of writing plaintext
+	to .cfg files. Existing password settings in .cfg files will be used 
+	but will not be automatically written anymore.
+	(See http://pypi.python.org/pypi/keyring for installation help)
+  * Use Gmail's XLIST command to map special internationalized folders
+  * --mbox_export is now a separate, optional operation, which can be done
+	on its own or after a backup
+  * backup_gmail.Gmail objects support a graceful cancel() method intended
+	to be called from a separate thread (as in gui.py). (Interrupting 
+	the command-line backup_gmail.py still terminates immediately).
+  * gui.py operates directly on backup_gmail.Gmail objects instead of 
+	running the backup_gmail "do" methods, and it connects the 
+	QProgressDialog cancel to Gmail.cancel()
+  * use en_US date formatting in Gmail.searchByDate
+  * improved completion messages for restore or save to reflect the count
+	of messages handled from the total set
+  * progress can use a custom formatter for values, as with backup to
+	format values as '%.2f MB'
+  * Messages without MESSAGE-ID still get a hash@backup-gmail.com id in 
+	label, but the RFC content is no longer touched
   * Handle invalid dates in messages when filtering by date. Such messages
-    will not be matched
-  * Do not pass mkdir OSError. Instead use isdir to determine whether to mk
-  * --strict_exclude indicates that messages are to be skipped by 
-    MESSAGE-ID in addition to folder
-  * add --prompt mode to pass credentials as STDIN instead of the 
-    command-line
-  * do not save passwords in plaintext .cfg files. (Investigating using 
-    Keyring lib for secure storage)
-  * --end_date is BEFORE (exclusive). Update usage. gui.py now passes date+1
-  
+	will not be matched
+  * --strict_exclude indicates that messages are to be skipped by
+	MESSAGE-ID in addition to folder
+  * add --prompt mode to pass credentials as STDIN instead of the command-line
+  * fix: --end_date behavior is date exclusive, so update usage, and 
+	gui.py now passes date+1
+  * fix gui.py bug where include_labels or exclude_labels were not properly
+	unset between runs if the mode changed
+
 backup-gmail 0.1.1
   * Implemented restore function
   * Implemented configure file

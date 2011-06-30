@@ -436,8 +436,6 @@ class BackupGmail(Gmail):
 		try:
 			if include_labels == None:
 				include_labels = self.__fetchDefaultLabels()
-			if exclude_labels == None:
-				exclude_labels = []
 			self.__fetchByLabels(date_range, include_labels, exclude_labels)
 		finally:
 			self.__outputLable()
@@ -694,6 +692,8 @@ def loadConfigFile(options, filename):
 			rsec.strict_exclude = config.getboolean(section, 'strict_exclude')
 		if rsec.username is not None and len(rsec.username):
 			rsec.password = keyu.get_password(rsec.username)
+		if rsec.password is None and config.has_option(section, 'password'):
+			rsec.password = config.get(section, 'password')
 	return result
 
 def saveConfigFile(profiles, filename):
