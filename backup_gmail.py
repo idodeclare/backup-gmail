@@ -647,6 +647,7 @@ class KeyringUtil:
 		try:
 			import keyring
 		except ImportError:
+			print >> sys.stderr, 'WARNING: keyring for secure passwords is not configured'
 			self.get_password_function = self.__noop_get_password
 			self.set_password_function = self.__noop_set_password
 		else:
