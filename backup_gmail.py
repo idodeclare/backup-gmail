@@ -320,7 +320,8 @@ class BackupGmail(Gmail):
 		if date == None or len(date) != 9:
 			fold = "Date-Unknown"
 		else:
-			fold = time.strftime("%Y-%m", date)
+			# %Y-%m directly from the tuple, in case time part is invalid
+			fold = "%04d-%02d" % (date[0], date[1])
 
 		h = hashlib.sha256(rfc).hexdigest()
 		mid = mail.get('message-id')
@@ -384,9 +385,10 @@ class BackupGmail(Gmail):
 	def __fetchDefaultLabels(self):
 		labels = self.fetchLabelNames()
 		specials = self.fetchSpecialLabels()
-		allMail = specials['AllMail']    # no space
-		if allMail not in labels:
-			labels.append(allMail)
+		if 'AllMail' in specials:     # AllMail with no space
+			allMail = specials['AllMail'] 
+			if allMail not in labels:
+				labels.append(allMail)
 		ignore = [ specials['Drafts'], specials['Trash'] ] 
 		labels = filter(lambda x : x not in ignore , labels)
 		return labels
