@@ -180,10 +180,9 @@ class Gmail(object):
 			attrbs = set(m.group(1).split())
 			label = m.group(2)
 
-			for k in ['Inbox', 'AllMail', 'Drafts', 'Sent', 'Starred', 'Trash' ]:
-				attr = '\\' + k
+			for attr in ['\\Inbox', '\\AllMail', '\\Drafts', '\\Sent', '\\Starred', '\\Trash' ]:
 				if attr in attrbs:
-					xlabels[k] = label
+					xlabels[attr] = label
 		return xlabels
 
 	def fetchLabelNames(self):
@@ -201,15 +200,6 @@ class Gmail(object):
 		if ret == 'NO':
 			raise self.SelectMailBoxError(name, self.fetchLabelNames())
 		return mail_count
-
-	def getGmailPrefix(self):
-		if self.gmail_prefix != None:
-			return self.gmail_prefix
-		specials = self.fetchSpecialLabels()
-		allMail = specials['AllMail']    # no space
-		p = allMail.split('/')[0]
-		self.gmail_prefix = p
-		return self.gmail_prefix
 
 	def checkDir(self):		
 		if not os.path.isdir(self.options.backup_dir):
@@ -385,11 +375,11 @@ class BackupGmail(Gmail):
 	def __fetchDefaultLabels(self):
 		labels = self.fetchLabelNames()
 		specials = self.fetchSpecialLabels()
-		if 'AllMail' in specials:     # AllMail with no space
-			allMail = specials['AllMail'] 
+		if '\\AllMail' in specials:     # AllMail with no space
+			allMail = specials['\\AllMail'] 
 			if allMail not in labels:
 				labels.append(allMail)
-		ignore = [ specials['Drafts'], specials['Trash'] ] 
+		ignore = [ specials['\\Drafts'], specials['\\Trash'] ] 
 		labels = filter(lambda x : x not in ignore , labels)
 		return labels
 
@@ -545,10 +535,13 @@ class RestoreGmail(Gmail):
 		self.progress.setRange(0, ntotal)
 		
 		specials = self.fetchSpecialLabels()
-		allMail = specials['AllMail']    # no space
+		inBox = specials['\\Inbox']
+		allMail = None
+		if '\\AllMail' in specials:     # AllMail with no space
+			allMail = specials['\\AllMail'] 
 
 		nrestored = 0
-		mail_count = self.selectMailBox('INBOX')
+		mail_count = self.selectMailBox(inBox)
 		for i, m in enumerate(self.mails.values()):
 			if self.canceling:
 				self.progress.setText("Restore was canceled by user.")
@@ -568,11 +561,11 @@ class RestoreGmail(Gmail):
 				if date_range is not None:
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
-				uid = self.__appendMessage(mail, dateTuple, 'INBOX')
+				uid = self.__appendMessage(mail, dateTuple, inBox)
 				nrestored += 1
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
-					if label != allMail:
+					if allMail is not None and label != allMail:
 						self.__assignLabel(uid, label)
 
 		self.progress.setText("Restored %d of %d message(s)." % (nrestored, ntotal))
