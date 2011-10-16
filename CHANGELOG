@@ -1,3 +1,7 @@
+backup-gmail 2011-10-16-1
+  * Since users can hide special folders in IMAP, treat them as
+    optional to avoid KeyError
+    
 backup-gmail 0.2
   * Full and incremental backup are now the same operation, and re-running
 	any backup will only write newly-detected messages ('label' is still

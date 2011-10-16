@@ -379,7 +379,10 @@ class BackupGmail(Gmail):
 			allMail = specials['\\AllMail'] 
 			if allMail not in labels:
 				labels.append(allMail)
-		ignore = [ specials['\\Drafts'], specials['\\Trash'] ] 
+		ignore = []
+		for labelkey in [ '\\Drafts', '\\Trash' ]:
+			if labelkey in specials:
+				ignore.append(specials[labelkey])
 		labels = filter(lambda x : x not in ignore , labels)
 		return labels
 
