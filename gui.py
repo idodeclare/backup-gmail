@@ -342,9 +342,11 @@ class GuiProgress:
 		self.lines = []
 		self.formatter = self.justString
 
-	def setRange(self, a, b):
+	def setRange(self, a, b, v):
 		self.min = a
 		self.max = b
+		if v is not None:
+			self.value = v
 
 	def setValue(self, value):
 		self.value = value

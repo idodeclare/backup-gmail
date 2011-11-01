@@ -258,8 +258,7 @@ class BackupGmail(Gmail):
 	def __initProgress(self, infos):
 		total = sum(map(lambda x:int(x[1]), infos))
 		self.progress.formatter = self.formatMegabytes
-		self.progress.setRange(0, total)
-		self.progress.setValue(0)
+		self.progress.setRange(0, total, 0)
 
 	def __fetchMailByLabel(self, label, date_range):
 		self.progress.setText("Fetching %s [calculate size]" % (label, ))
@@ -279,8 +278,8 @@ class BackupGmail(Gmail):
 			infos = self.fetchRFC822Info(date_range)
 			envs = self.fetchMessageId(date_range)
 
-		self.progress.setText("Fetching %s [@value/@max]" % (label, ))
 		self.__initProgress(infos)
+		self.progress.setText("Fetching %s [@value/@max]" % (label, ))
 		total = 0
 
 		for i, (env, info) in enumerate(zip(envs, infos)):
@@ -465,8 +464,8 @@ class SaveMbox(Gmail):
 			os.mkdir(odir)
 
 		ntotal = len(self.mails)
+		self.progress.setRange(0, ntotal, 0)
 		self.progress.setText("Exporting messages to mbox(es) [@value/@max]")
-		self.progress.setRange(0, ntotal)
 
 		nsaved = 0
 		for i, m in enumerate(self.mails.values()):
@@ -534,8 +533,8 @@ class RestoreGmail(Gmail):
 		self.labels = set(self.fetchLabelNames())
 
 		ntotal = len(self.mails)
+		self.progress.setRange(0, ntotal, 0)
 		self.progress.setText("Processing messages for restore [@value/@max]")
-		self.progress.setRange(0, ntotal)
 		
 		specials = self.fetchSpecialLabels()
 		inBox = specials['\\Inbox']
@@ -586,10 +585,11 @@ class TerminalProgress:
 	def justString(self, v):
 		return str(v)
 
-	def setRange(self, a, b):
+	def setRange(self, a, b, v):
 		self.min = a
 		self.max = b
-		self.update()
+		if v is not None:
+			self.value = v
 
 	def setValue(self, value):
 		self.value = value
