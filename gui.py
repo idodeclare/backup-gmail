@@ -175,14 +175,15 @@ class MainWindow(QMainWindow):
 		self.keep_read.setChecked(options.keep_read == True)
 
 		if options.start_date != None:
+			sdate = QDate.fromString(options.start_date.decode('utf-8'), "dd-MMM-yyyy")
 			self.start_date_enable.setChecked(True)
-			self.start_date.setDate(QDate.fromString(options.start_date, "dd-MMM-yyyy"))
+			self.start_date.setDate(sdate)
 		else:
 			self.start_date_enable.setChecked(False)
 		
 		if options.end_date != None:
 			# options.end_date is exclusive, but UI is inclusive, so subtract 1 day
-			edate = QDate.fromString(options.end_date, "dd-MMM-yyyy").addDays(-1)
+			edate = QDate.fromString(options.end_date.decode('utf-8'), "dd-MMM-yyyy").addDays(-1)
 			self.end_date_enable.setChecked(True)
 			self.end_date.setDate(edate)
 		else:
@@ -207,13 +208,13 @@ class MainWindow(QMainWindow):
 		options.keep_read = self.keep_read.isChecked()
 
 		if self.start_date_enable.isChecked():
-			options.start_date = self.start_date.date().toString("dd-MMM-yyyy")
+			options.start_date = self.start_date.date().toString("dd-MMM-yyyy").encode('utf-8')
 		else:
 			options.start_date = None
 		
 		if self.end_date_enable.isChecked():
 			# options.end_date is exclusive, so add 1 day
-			options.end_date = self.end_date.date().addDays(1).toString("dd-MMM-yyyy")
+			options.end_date = self.end_date.date().addDays(1).toString("dd-MMM-yyyy").encode('utf-8')
 		else:
 			options.end_date = None
 		
