@@ -1,3 +1,12 @@
+backup-gmail 2011-11-2
+  * fix localized date handling for gui.py and command-line arguments of
+    backup_gmail.py
+  * fix to support Unicode in ConfigParser files by converting to and from
+    Latin-1 encoding
+  * KNOWN PROBLEM: with filtering non-ASCII mailbox names because imaplib 
+    does not currently support the IMAP-modified UTF-7 encoded needed for 
+    general Unicode support.
+
 backup-gmail 2011-10-16-1
   * Since users can hide special folders in IMAP, treat them as
     optional to avoid KeyError

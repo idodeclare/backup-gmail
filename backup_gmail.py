@@ -11,7 +11,7 @@ import traceback
 import email.message, email.utils
 import re, sys, hashlib, os, shutil, time, optparse, mailbox, copy
 import locale
-from datetime import datetime
+from datetime import datetime, date
 import ConfigParser
 
 KC_SERVICE_TEMPLATE = 'backup_gmail (%s)'
@@ -617,27 +617,19 @@ class TerminalProgress:
 
 class GmailDate:
 	GMAIL_DFMT = '%d-%b-%Y'  # i.e., dd-MMM-yyyy
-	GMAIL_LOC = 'en_US'
+	POSIX_MONTHS = [None, 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 	@classmethod
 	def toLocal(cls, gmail_date, format=GMAIL_DFMT):
-		currlang, encoding = locale.getlocale(locale.LC_TIME)
-		locale.setlocale(locale.LC_TIME, cls.GMAIL_LOC) 
-		try:
-			d = datetime.strptime(gmail_date, cls.GMAIL_DFMT)
-		finally:
-			locale.setlocale(locale.LC_TIME, currlang)
-		return d.strftime(format)
+		dd, pMMM, yyyy = gmail_date.split('-', 3)
+		iMMM = cls.POSIX_MONTHS.index(pMMM)
+		pdate = date(int(yyyy), iMMM, int(dd))
+		return pdate.strftime(cls.GMAIL_DFMT)
 
 	@classmethod
 	def fromLocal(cls, date_string, format=GMAIL_DFMT):
 		d = datetime.strptime(date_string, format)
-		currlang, encoding = locale.getlocale(locale.LC_TIME)
-		locale.setlocale(locale.LC_TIME, cls.GMAIL_LOC) 
-		try:
-			return d.strftime(cls.GMAIL_DFMT)
-		finally:
-			locale.setlocale(locale.LC_TIME, currlang)
+		return '%02d-%s-%04d' % (d.day, cls.POSIX_MONTHS[d.month], d.year)
 
 class KeyringUtil:
 	def __init__(self, service_template):
@@ -667,39 +659,43 @@ class KeyringUtil:
 		return
 
 def loadConfigFile(options, filename):
+	def decode_helper(value):
+		if value == None:
+			return
+		return value.decode('iso-8859-1')
 	config = ConfigParser.SafeConfigParser()
 	config.read([filename, os.path.expanduser('~/.backup_gmail.cfg')])
 	keyu = KeyringUtil(KC_SERVICE_TEMPLATE)
 	result = {}
 	for section in config.sections():
 		rsec = result[section] = copy.copy(options)
-		rsec.username = config.get(section, 'username')
-		rsec.backup_dir = config.get(section, 'backup_dir')
+		rsec.username = decode_helper(config.get(section, 'username'))
+		rsec.backup_dir = decode_helper(config.get(section, 'backup_dir'))
 		if config.has_option(section, 'keep_read'):
 			rsec.keep_read = config.getboolean(section, 'keep_read')
 		if config.has_option(section, 'start_date'):
-			rsec.start_date = config.get(section, 'start_date')
+			rsec.start_date = decode_helper(config.get(section, 'start_date'))
 		if config.has_option(section, 'end_date'):
-			rsec.end_date = config.get(section, 'end_date')
+			rsec.end_date = decode_helper(config.get(section, 'end_date'))
 		if config.has_option(section, 'include_labels'):
-			rsec.include_labels = config.get(section, 'include_labels')
+			rsec.include_labels = decode_helper(config.get(section, 'include_labels'))
 		if config.has_option(section, 'exclude_labels'):
-			rsec.exclude_labels = config.get(section, 'exclude_labels')
+			rsec.exclude_labels = decode_helper(config.get(section, 'exclude_labels'))
 		if config.has_option(section, 'mbox_export'):
-			rsec.mbox_export = config.get(section, 'mbox_export')
+			rsec.mbox_export = decode_helper(config.get(section, 'mbox_export'))
 		if config.has_option(section, 'strict_exclude'):
 			rsec.strict_exclude = config.getboolean(section, 'strict_exclude')
 		if rsec.username is not None and len(rsec.username):
 			rsec.password = keyu.get_password(rsec.username)
 		if rsec.password is None and config.has_option(section, 'password'):
-			rsec.password = config.get(section, 'password')
+			rsec.password = decode_helper(config.get(section, 'password'))
 	return result
 
 def saveConfigFile(profiles, filename):
 	def set_helper(cfg, section, option, value):
 		if value == None:
 			return
-		return cfg.set(section, option, str(value))
+		return cfg.set(section, option, unicode(value).encode('iso-8859-1'))
 	keyu = KeyringUtil(KC_SERVICE_TEMPLATE)
 	config = ConfigParser.SafeConfigParser()
 	for section in profiles:
@@ -729,8 +725,8 @@ def getOptionParser():
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to online gmail account")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
 	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status (Slow)")
-	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy")
-	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: dd-MMM-yyyy")
+	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy in user's locale")
+	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: dd-MMM-yyyy in user's locale")
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
@@ -739,6 +735,7 @@ def getOptionParser():
 	return parser
 
 if __name__ == '__main__':
+	locale.setlocale(locale.LC_TIME, '')
 	parser = getOptionParser()
 	(options, args) = parser.parse_args()
 	

@@ -6,6 +6,7 @@ Copyright 2011, Joseph Wen
 """
  
 import sys
+import locale
 import traceback
 from datetime import datetime, date
 from PySide.QtCore import *
@@ -391,6 +392,7 @@ class BackupRestoreThread(QThread):
 		self.backup_success.emit('\n'.join(self.prog.getLines()))
 
 if __name__ == '__main__':
+	locale.setlocale(locale.LC_TIME, '')
 	app = QApplication(sys.argv)
 	main = MainWindow()
 	main.show()
