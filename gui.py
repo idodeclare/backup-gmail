@@ -159,9 +159,18 @@ class MainWindow(QMainWindow):
 			self.current_profile = text
 
 	def setUI(self, options):
-		self.user_text.setText(options.username)
-		self.pass_text.setText(options.password)
-		self.backup_path.setText(options.backup_dir)
+		if options.username is not None:
+			self.user_text.setText(options.username.decode('utf-8'))
+		else:
+			self.user_text.clear()
+		if options.password is not None:
+			self.pass_text.setText(options.password.decode('utf-8'))
+		else:
+			self.pass_text.clear()
+		if options.backup_dir is not None:
+			self.backup_path.setText(options.backup_dir.decode('utf-8'))
+		else:
+			self.backup_path.clear()
 
 		self.keep_read.setChecked(options.keep_read == True)
 
@@ -181,20 +190,20 @@ class MainWindow(QMainWindow):
 
 		if options.include_labels != None:
 			self.include_label.setChecked(True)
-			self.label_filter_text.setText(options.include_labels)
+			self.label_filter_text.setText(options.include_labels.decode('utf-8'))
 		elif options.exclude_labels != None:
 		  if options.strict_exclude:
 		    self.strict_exclude.setChecked(True)
 		  else:
 			  self.exclude_label.setChecked(True)
-		  self.label_filter_text.setText(options.exclude_labels)
+		  self.label_filter_text.setText(options.exclude_labels.decode('utf-8'))
 		else:
 			self.label_filter_text.setText("")
 
 	def saveUI(self, options):
-		options.username = self.user_text.text()
-		options.password = self.pass_text.text()
-		options.backup_dir = self.backup_path.text()
+		options.username = self.user_text.text().encode('utf-8')
+		options.password = self.pass_text.text().encode('utf-8')
+		options.backup_dir = self.backup_path.text().encode('utf-8')
 		options.keep_read = self.keep_read.isChecked()
 
 		if self.start_date_enable.isChecked():
@@ -212,9 +221,9 @@ class MainWindow(QMainWindow):
 		options.exclude_labels = None
 		if self.label_filter_text.text() != '':
 			if self.include_label.isChecked():
-				options.include_labels = self.label_filter_text.text()
+				options.include_labels = self.label_filter_text.text().encode('utf-8')
 			else:
-				options.exclude_labels = self.label_filter_text.text()
+				options.exclude_labels = self.label_filter_text.text().encode('utf-8')
 				options.strict_exclude = self.strict_exclude.isChecked()
 
 	def storeConfig(self):
@@ -332,7 +341,7 @@ class MainWindow(QMainWindow):
 	def update_progress(self):
 		self.progress.setRange(self.t.prog.min, self.t.prog.max)
 		self.progress.setValue(self.t.prog.value)
-		self.progress.setLabelText(self.t.prog.getText())
+		self.progress.setLabelText(self.t.prog.getText().decode('utf-8'))
 
 class GuiProgress:
 	def __init__(self):
@@ -389,7 +398,7 @@ class BackupRestoreThread(QThread):
 			traceback.print_exc(e)
 			self.error.emit(e.__str__())
 			return
-		self.backup_success.emit('\n'.join(self.prog.getLines()))
+		self.backup_success.emit('\n'.join(self.prog.getLines()).decode('utf-8'))
 
 if __name__ == '__main__':
 	locale.setlocale(locale.LC_TIME, '')

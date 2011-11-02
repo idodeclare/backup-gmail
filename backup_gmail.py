@@ -13,6 +13,7 @@ import re, sys, hashlib, os, shutil, time, optparse, mailbox, copy
 import locale
 from datetime import datetime, date
 import ConfigParser
+from imapUTF7 import imapUTF7Encode, imapUTF7Decode
 
 KC_SERVICE_TEMPLATE = 'backup_gmail (%s)'
 
@@ -187,16 +188,17 @@ class Gmail(object):
 
 	def fetchLabelNames(self):
 		labels = self.gmail.list()[1]
-		return map(lambda x:x[0], 
+		return map(lambda x:imapUTF7Decode(x).encode('utf-8'),
+			map(lambda x:x[0], 
 			filter(lambda x : len(x) > 0, 
-			map(lambda x : re.findall('\(\\\\HasNoChildren\) "/" "([^"]+)"', x), labels)))
+			map(lambda x : re.findall('\(\\\\HasNoChildren\) "/" "([^"]+)"', x), labels))))
 
 	def isValidMailBox(self, name):
-		ret, mail_count = self.gmail.select(name)
+		ret, mail_count = self.gmail.select(imapUTF7Encode(name.decode('utf-8')))
 		return (ret != 'NO')
 
 	def selectMailBox(self, name):
-		ret, mail_count = self.gmail.select(name)
+		ret, mail_count = self.gmail.select(imapUTF7Encode(name.decode('utf-8')))
 		if ret == 'NO':
 			raise self.SelectMailBoxError(name, self.fetchLabelNames())
 		return mail_count
@@ -659,43 +661,39 @@ class KeyringUtil:
 		return
 
 def loadConfigFile(options, filename):
-	def decode_helper(value):
-		if value == None:
-			return
-		return value.decode('iso-8859-1')
 	config = ConfigParser.SafeConfigParser()
 	config.read([filename, os.path.expanduser('~/.backup_gmail.cfg')])
 	keyu = KeyringUtil(KC_SERVICE_TEMPLATE)
 	result = {}
 	for section in config.sections():
 		rsec = result[section] = copy.copy(options)
-		rsec.username = decode_helper(config.get(section, 'username'))
-		rsec.backup_dir = decode_helper(config.get(section, 'backup_dir'))
+		rsec.username = config.get(section, 'username')
+		rsec.backup_dir = config.get(section, 'backup_dir')
 		if config.has_option(section, 'keep_read'):
 			rsec.keep_read = config.getboolean(section, 'keep_read')
 		if config.has_option(section, 'start_date'):
-			rsec.start_date = decode_helper(config.get(section, 'start_date'))
+			rsec.start_date = config.get(section, 'start_date')
 		if config.has_option(section, 'end_date'):
-			rsec.end_date = decode_helper(config.get(section, 'end_date'))
+			rsec.end_date = config.get(section, 'end_date')
 		if config.has_option(section, 'include_labels'):
-			rsec.include_labels = decode_helper(config.get(section, 'include_labels'))
+			rsec.include_labels = config.get(section, 'include_labels')
 		if config.has_option(section, 'exclude_labels'):
-			rsec.exclude_labels = decode_helper(config.get(section, 'exclude_labels'))
+			rsec.exclude_labels = config.get(section, 'exclude_labels')
 		if config.has_option(section, 'mbox_export'):
-			rsec.mbox_export = decode_helper(config.get(section, 'mbox_export'))
+			rsec.mbox_export = config.get(section, 'mbox_export')
 		if config.has_option(section, 'strict_exclude'):
 			rsec.strict_exclude = config.getboolean(section, 'strict_exclude')
 		if rsec.username is not None and len(rsec.username):
 			rsec.password = keyu.get_password(rsec.username)
 		if rsec.password is None and config.has_option(section, 'password'):
-			rsec.password = decode_helper(config.get(section, 'password'))
+			rsec.password = config.get(section, 'password')
 	return result
 
 def saveConfigFile(profiles, filename):
 	def set_helper(cfg, section, option, value):
 		if value == None:
 			return
-		return cfg.set(section, option, unicode(value).encode('iso-8859-1'))
+		return cfg.set(section, option, value)
 	keyu = KeyringUtil(KC_SERVICE_TEMPLATE)
 	config = ConfigParser.SafeConfigParser()
 	for section in profiles:
@@ -703,13 +701,13 @@ def saveConfigFile(profiles, filename):
 		config.add_section(section)
 		set_helper(config, section, 'username', p.username)
 		set_helper(config, section, 'backup_dir', p.backup_dir)
-		set_helper(config, section, 'keep_read', p.keep_read)
+		set_helper(config, section, 'keep_read', str(p.keep_read))
 		set_helper(config, section, 'start_date', p.start_date)
 		set_helper(config, section, 'end_date', p.end_date)
 		set_helper(config, section, 'include_labels', p.include_labels)
 		set_helper(config, section, 'exclude_labels', p.exclude_labels)
 		set_helper(config, section, 'mbox_export', p.mbox_export)
-		set_helper(config, section, 'strict_exclude', p.strict_exclude)
+		set_helper(config, section, 'strict_exclude', str(p.strict_exclude))
 		if p.password is not None and len(p.password):
 			if p.username is not None and len(p.username):
 				keyu.set_password(p.username, p.password)
