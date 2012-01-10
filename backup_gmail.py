@@ -294,8 +294,6 @@ class BackupGmail(Gmail):
 					self.__fetchMail(uid, seen, label, size)
 			else:
 				self.mails[mid].labels.add(label)
-				if seen == False and self.options.keep_read:
-					self.unsetFlag(uid, '\\Seen')
 			total += int(size)
 			self.progress.setValue(total)
 			
@@ -507,15 +505,23 @@ class RestoreGmail(Gmail):
 		super(RestoreGmail, self).__init__(options, progress)
 
 	def __appendMessage(self, message, date, mailbox = None):
-		ret, msg = self.gmail.append(mailbox, None, date, message)
+		utf7mailbox = None
+		if mailbox is not None:
+			utf7mailbox = imapUTF7Encode(mailbox.decode('utf-8'))
+		ret, msg = self.gmail.append(utf7mailbox, None, date, message)
 		return re.findall("APPENDUID [0-9]+ ([0-9]+)", msg[0])[0]
 
 	def __assignLabel(self, uid, label):
-		if label not in self.labels:
-			self.gmail.create(label)
-			self.labels = set(self.fetchLabelNames())
-		ret, msg = self.gmail.uid('COPY', uid, label)
+		self.__ensureLabel(label)
+		utf7label = imapUTF7Encode(label.decode('utf-8'))
+		ret, msg = self.gmail.uid('COPY', uid, utf7label)
 	
+	def __ensureLabel(self, label):
+		if label not in self.labels:
+			utf7label = imapUTF7Encode(label.decode('utf-8'))
+			self.gmail.create(utf7label)
+			self.labels = set(self.fetchLabelNames())
+
 	def execute(self):
 		date_range = [self.options.start_date, self.options.end_date]		
 		include_labels = None
@@ -540,12 +546,16 @@ class RestoreGmail(Gmail):
 		
 		specials = self.fetchSpecialLabels()
 		inBox = specials['\\Inbox']
-		allMail = None
-		if '\\AllMail' in specials:     # AllMail with no space
-			allMail = specials['\\AllMail'] 
+		if '\\AllMail' not in specials:     # AllMail with no space
+			raise ApplicationError('\\AllMail is not IMAP accessible!') 
+		allMail = specials['\\AllMail'] 
+		labelTarget = allMail
+		if self.options.label_target is not None:
+			self.__ensureLabel(self.options.label_target)
+			labelTarget = self.options.label_target
 
 		nrestored = 0
-		mail_count = self.selectMailBox(inBox)
+		mail_count = self.selectMailBox(labelTarget)
 		for i, m in enumerate(self.mails.values()):
 			if self.canceling:
 				self.progress.setText("Restore was canceled by user.")
@@ -565,11 +575,11 @@ class RestoreGmail(Gmail):
 				if date_range is not None:
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
-				uid = self.__appendMessage(mail, dateTuple, inBox)
+				uid = self.__appendMessage(mail, dateTuple, labelTarget)
 				nrestored += 1
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
-					if allMail is not None and label != allMail:
+					if label.lower() != inBox.lower() and label != allMail:
 						self.__assignLabel(uid, label)
 
 		self.progress.setText("Restored %d of %d message(s)." % (nrestored, ntotal))
@@ -720,7 +730,7 @@ def getOptionParser():
 	parser.add_option("--user", dest="username", action="store", help = "Gmail email@address")
 	parser.add_option("--password", dest="password", action="store", help = "Gmail password")
 	parser.add_option("-P", "--prompt", dest="prompt", action="store_true", default = False, help = "Prompt for Gmail credentials")
-	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to online gmail account")
+	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to gmail (see --label)")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
 	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status (Slow)")
 	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy in user's locale")
@@ -728,6 +738,7 @@ def getOptionParser():
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
+	parser.add_option("-l", "--label", dest="label_target", action="store", help = "Target label for restore (default \\AllMail)")
 	parser.add_option("-c", "--config", dest="config_file", action="store", help = "Load setting from config file")
 	parser.add_option("-p", "--profile", dest="profile", action="store", default = "Main", help = "Use this profile in the config file.")
 	return parser

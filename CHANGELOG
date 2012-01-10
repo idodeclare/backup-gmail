@@ -1,3 +1,9 @@
+backup-gmail 2012-7-10
+  * fix: restore can assign non-ASCII labels via UTF-7
+  * restore by default restores to \AllMail; can restore to specified --label
+  * restore no longer puts anything into \Inbox (unless explicit with --label)
+  * remove redundant clearing of \Seen in backup if --keep_read_status
+
 backup-gmail 2011-11-2
   * fix localized date handling for gui.py and command-line arguments of
     backup_gmail.py

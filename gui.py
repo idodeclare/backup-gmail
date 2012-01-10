@@ -69,6 +69,10 @@ class MainWindow(QMainWindow):
 		self.label_filter_text = QLineEdit()
 		self.label_filter_text.setPlaceholderText("Keep empty to fetch all labels")
 
+		self.label_target_label = QLabel("Restore to Label:")
+		self.label_target_text = QLineEdit()
+		self.label_target_text.setPlaceholderText("Default \\AllMail")
+
 		self.load_config_btn = QPushButton("Load Config")        
 		self.store_config_btn = QPushButton("Save Config")        
 		self.restore_btn = QPushButton("Restore")        
@@ -106,6 +110,8 @@ class MainWindow(QMainWindow):
 		layout.addWidget(self.backup_path, 6, 1)
 		layout.addWidget(self.backup_path_btn, 6, 2)
 
+		layout.addWidget(self.label_target_label, 7, 0)
+		layout.addWidget(self.label_target_text, 7, 1)
 
 		btnLayout = QHBoxLayout()
 		btnLayout.addWidget(self.load_config_btn)
@@ -226,6 +232,10 @@ class MainWindow(QMainWindow):
 			else:
 				options.exclude_labels = self.label_filter_text.text().encode('utf-8')
 				options.strict_exclude = self.strict_exclude.isChecked()
+
+		options.label_target = None
+		if self.label_target_text.text() != '':
+			options.label_target = self.label_target_text.text().encode('utf-8')
 
 	def storeConfig(self):
 		name = QFileDialog.getSaveFileName(self, "Open File", ".", "Config (*.cfg)")
