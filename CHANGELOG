@@ -1,3 +1,6 @@
+backup-gmail 2012-1-11.1
+  * fix: also UTF-7 decode special folders
+
 backup-gmail 2012-1-11
   * restore treats 'INBOX' as a special name even for non-English accounts
   * improve help string

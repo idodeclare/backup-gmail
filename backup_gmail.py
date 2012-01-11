@@ -179,7 +179,8 @@ class Gmail(object):
 			if m is None:
 				continue
 			attrbs = set(m.group(1).split())
-			label = m.group(2)
+			utf7label = m.group(2)
+			label = imapUTF7Decode(utf7label).encode('utf-8')
 
 			for attr in ['\\Inbox', '\\AllMail', '\\Drafts', '\\Sent', '\\Starred', '\\Trash' ]:
 				if attr in attrbs:
