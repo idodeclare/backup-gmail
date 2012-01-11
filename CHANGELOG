@@ -1,7 +1,11 @@
-backup-gmail 2012-7-10.1
+backup-gmail 2012-1-11
+  * restore treats 'INBOX' as a special name even for non-English accounts
+  * improve help string
+
+backup-gmail 2012-1-10.1
   * improve help strings and gui labels
 
-backup-gmail 2012-7-10
+backup-gmail 2012-1-10
   * fix: restore can assign non-ASCII labels via UTF-7
   * restore by default restores to \AllMail; can restore to specified --label
   * restore no longer puts anything into \Inbox (unless explicit with --label)

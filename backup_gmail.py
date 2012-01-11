@@ -545,7 +545,7 @@ class RestoreGmail(Gmail):
 		self.progress.setText("Processing messages for restore [@value/@max]")
 		
 		specials = self.fetchSpecialLabels()
-		inBox = specials['\\Inbox']
+		inBoxes = [ 'inbox', specials['\\Inbox'].lower() ]
 		if '\\AllMail' not in specials:     # AllMail with no space
 			raise self.ApplicationError('\\AllMail is not IMAP accessible!') 
 		allMail = specials['\\AllMail'] 
@@ -579,7 +579,7 @@ class RestoreGmail(Gmail):
 				nrestored += 1
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
-					if label.lower() != inBox.lower() and label != allMail:
+					if label.lower() not in inBoxes and label != allMail:
 						self.__assignLabel(uid, label)
 
 		self.progress.setText("Restored %d of %d message(s)." % (nrestored, ntotal))
@@ -738,7 +738,7 @@ def getOptionParser():
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
 	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
-	parser.add_option("-l", "--label", dest="label_target", action="store", help = "Also restore to specified label")
+	parser.add_option("-l", "--label", dest="label_target", action="store", help = "Restore also to specified label")
 	parser.add_option("-c", "--config", dest="config_file", action="store", help = "Load setting from config file")
 	parser.add_option("-p", "--profile", dest="profile", action="store", default = "Main", help = "Use this profile in the config file.")
 	return parser
