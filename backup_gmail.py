@@ -205,7 +205,7 @@ class Gmail(object):
 
 	def checkDir(self):		
 		if not os.path.isdir(self.options.backup_dir):
-			raise ApplicationError('Error: [%s] is not a directory!\n' % (self.options.backup_dir, ))
+			raise self.ApplicationError('[%s] is not a directory!\n' % (self.options.backup_dir, ))
 
 	def readLabelFile(self):
 		labelFile = "%s/label" % (self.options.backup_dir, )
@@ -547,7 +547,7 @@ class RestoreGmail(Gmail):
 		specials = self.fetchSpecialLabels()
 		inBox = specials['\\Inbox']
 		if '\\AllMail' not in specials:     # AllMail with no space
-			raise ApplicationError('\\AllMail is not IMAP accessible!') 
+			raise self.ApplicationError('\\AllMail is not IMAP accessible!') 
 		allMail = specials['\\AllMail'] 
 		labelTarget = allMail
 		if self.options.label_target is not None:
