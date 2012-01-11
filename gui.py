@@ -61,17 +61,17 @@ class MainWindow(QMainWindow):
 		self.end_date_enable = QCheckBox("Enable")
 		self.end_date_enable.stateChanged.connect(self.end_date.setEnabled)
 
-		self.label_filter_label = QLabel("Label Filter:")
+		self.label_filter_label = QLabel("Label(s) Filter:")
 		self.include_label = QRadioButton("Include")
 		self.include_label.setChecked(True)
 		self.exclude_label = QRadioButton("Exclude")
 		self.strict_exclude = QRadioButton("Exclude (Strict)")
 		self.label_filter_text = QLineEdit()
-		self.label_filter_text.setPlaceholderText("Keep empty to fetch all labels")
+		self.label_filter_text.setPlaceholderText("Optional; separate by '^'")
 
-		self.label_target_label = QLabel("Restore to Label:")
+		self.label_target_label = QLabel("Restore also to:")
 		self.label_target_text = QLineEdit()
-		self.label_target_text.setPlaceholderText("Default \\AllMail")
+		self.label_target_text.setPlaceholderText("Optional label")
 
 		self.load_config_btn = QPushButton("Load Config")        
 		self.store_config_btn = QPushButton("Save Config")        
