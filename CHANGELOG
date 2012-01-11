@@ -1,3 +1,6 @@
+backup-gmail 2012-7-10.1
+  * improve help strings and gui labels
+
 backup-gmail 2012-7-10
   * fix: restore can assign non-ASCII labels via UTF-7
   * restore by default restores to \AllMail; can restore to specified --label
