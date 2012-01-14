@@ -105,13 +105,13 @@ class Gmail(object):
 		self.mboxs = {}
 		self.labels = set()
 		self.gmail = None
+		self.peek = True
 		self.canceling = False
 		
 	def cancel(self):
 	  self.canceling = True
 
 	def login(self):
-		self.gmail_prefix = None
 		self.gmail = imaplib.IMAP4_SSL('imap.gmail.com', 993)
 		try:
 			ret, message = self.gmail.login(self.options.username, self.options.password)
@@ -129,26 +129,34 @@ class Gmail(object):
 	def fetchRFC822(self, uid):
 		data = []
 		while not self.__resultCountCheck(data, uid):
-			ret, data = self.gmail.fetch(uid, 'RFC822')
+			ret, data = self.gmail.fetch(uid, '(BODY.PEEK[])' if self.peek else 'RFC822')
 			data = filter(lambda x: len(x) == 2, data)
 			data = map(lambda x:(getUID(x[0]), x[1]), data)
 		return data
 
 	@UIDconverter
-	def fetchMessageId(self, uid):
+	def fetchMessageId(self, uid): # return UID, MESSAGE-ID
 		data = []
 		while not self.__resultCountCheck(data, uid):
-			ret, data = self.gmail.fetch(uid, '(BODY[HEADER.FIELDS (MESSAGE-ID)])')
+			ret, data = self.gmail.fetch(uid, '(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])' if self.peek \
+				else '(BODY[HEADER.FIELDS (MESSAGE-ID)])')
 			data = filter(lambda x: len(x) == 2, data)
 			data = map(lambda x:(getUID(x[0]), getMID(x[1])), data)
 		return data
 
 	@UIDconverter
-	def fetchRFC822Info(self, uid): # return UID, SIZE, SEEN
+	def fetchRFC822Info(self, uid): # return UID, SIZE, SEEN, MESSAGE-ID
 		data = []
 		while not self.__resultCountCheck(data, uid):
-			ret, data = self.gmail.fetch(uid, '(RFC822.SIZE FLAGS)')
-			data = map(lambda x : (getUID(x), re.findall('RFC822.SIZE ([0-9]+)', x)[0], re.search("Seen", x) != None), data)
+			ret, data = self.gmail.fetch(uid, 
+				'(RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])' if self.peek \
+				else '(RFC822.SIZE FLAGS BODY[HEADER.FIELDS (MESSAGE-ID)])')
+			data = filter(lambda x: len(x) == 2, data)
+			data = map(lambda x : (getUID(x[0]), 
+					re.findall('RFC822.SIZE ([0-9]+)', x[0])[0], 
+					re.search("Seen", x[0]) != None,
+					getMID(x[1])), 
+				data)
 		return data
 
 	# start is inclusive, end is exclusive
@@ -275,21 +283,18 @@ class BackupGmail(Gmail):
 		mail_count = self.selectMailBox(label)
 		if date_range[0] == None and date_range[1] == None:
 			infos = self.fetchRFC822Info('1:%s' % (mail_count[0], ))
-			envs = self.fetchMessageId('1:%s' % (mail_count[0], ))
 		else:
 			date_range = self.searchByDate(*date_range)
 			infos = self.fetchRFC822Info(date_range)
-			envs = self.fetchMessageId(date_range)
 
 		self.__initProgress(infos)
 		self.progress.setText("Fetching %s [@value/@max]" % (label, ))
 		total = 0
 
-		for i, (env, info) in enumerate(zip(envs, infos)):
+		for i, info in enumerate(infos):
 			if self.canceling:
 			  break
-			uid, mid = env
-			uid, size, seen = info
+			uid, size, seen, mid = info
 			if mid not in self.mails:
 				if mid not in self.exclude_mids:
 					self.__fetchMail(uid, seen, label, size)
@@ -345,10 +350,6 @@ class BackupGmail(Gmail):
 			return
 
 		rfcs = self.fetchRFC822('%s:%s' % (self.fetchStart, self.fetchEnd))
-		if self.options.keep_read:
-			for i, rfc in enumerate(rfcs):
-				if self.fetchBuffer[i][0] == False:
-					self.unsetFlag(rfc[0], '\\Seen')
 		for i, rfc in enumerate(rfcs):
 			self.__processMail(rfc[1], *self.fetchBuffer[i])
 
@@ -425,6 +426,7 @@ class BackupGmail(Gmail):
 			exclude_labels = self.options.exclude_labels.split('^')
 
 		self.login()
+		self.peek = self.options.keep_read
 		self.makeDir()
 		self.readLabelFile()
 
@@ -733,7 +735,7 @@ def getOptionParser():
 	parser.add_option("-P", "--prompt", dest="prompt", action="store_true", default = False, help = "Prompt for Gmail credentials")
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to gmail (see --label)")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
-	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status (Slow)")
+	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status")
 	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy in user's locale")
 	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: dd-MMM-yyyy in user's locale")
 	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")

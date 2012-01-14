@@ -43,7 +43,8 @@ class MainWindow(QMainWindow):
 		self.backup_path = QLineEdit()
 		self.backup_path_btn = QPushButton("Select")
 
-		self.keep_read = QCheckBox("Keep read/unread (Slow)")
+		self.keep_read = QCheckBox("Keep the mail read status")
+		self.keep_read.setChecked(True)
 
 		self.start_date_label = QLabel("From:")
 		self.start_date = QDateEdit()
