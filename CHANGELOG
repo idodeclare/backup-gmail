@@ -1,3 +1,13 @@
+backup-gmail 2012-1-17
+  * fix: RestoreGmail works around imaplib's Time2InternalDate function to 
+    avoid sending non-RFC2822 dates to IMAP
+
+backup-gmail 2012-1-14
+  * fix: use BODY.PEEK to effect --keep_status instead of manually unsetting
+    \Seen. This fixes the behavior and is no longer a slow operation
+  * method fetchRFC822Info(...) fetches MESSAGE-ID also, so a separate call
+    to fetchMessageId(...) is not required
+  
 backup-gmail 2012-1-11.1
   * fix: also UTF-7 decode special folders
 

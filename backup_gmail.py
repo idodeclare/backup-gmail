@@ -511,6 +511,8 @@ class RestoreGmail(Gmail):
 		utf7mailbox = None
 		if mailbox is not None:
 			utf7mailbox = imapUTF7Encode(mailbox.decode('utf-8'))
+		if isinstance(date, str) and (date[0],date[-1]) != ('"','"'):
+			date = '"%s"' % date
 		ret, msg = self.gmail.append(utf7mailbox, None, date, message)
 		return re.findall("APPENDUID [0-9]+ ([0-9]+)", msg[0])[0]
 
@@ -574,11 +576,13 @@ class RestoreGmail(Gmail):
 			with open("%s/%s/%s" % (self.options.backup_dir, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
-				dateTuple = email.utils.parsedate(e.get('date'))
-				if date_range is not None:
+				date2822 = e.get('date')
+				if date_range is not None \
+						and (date_range[0] is not None or date_range[1] is not None):
+					dateTuple = email.utils.parsedate(date2822)
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
-				uid = self.__appendMessage(mail, dateTuple, labelTarget)
+				uid = self.__appendMessage(mail, date2822, labelTarget)
 				nrestored += 1
 				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
