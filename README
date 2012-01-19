@@ -19,6 +19,7 @@ configured Gmail time zone.
 zones for --start and --end, so results can be slightly incorrect near
 the date range boundaries.
 
+
 == Additional Libraries ==
 
 The Qt library, used by gui.py, may need to be installed for platforms
