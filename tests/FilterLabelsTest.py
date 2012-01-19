@@ -7,6 +7,9 @@ import unittest
 import re
 import backup_gmail
 
+def theTestSuite():
+	return unittest.TestLoader().loadTestsFromTestCase(FilterLabelsTest)
+
 class FilterLabelsTest(unittest.TestCase):
 	uinput = ['Acorn', 'Chariot', 'coöperate', 'INBOX']
 

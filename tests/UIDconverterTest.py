@@ -9,6 +9,9 @@ import backup_gmail
 # Roman numeral code is taken from "Dive Into Python", by Mark Pilgrim, 
 # copyright 2001, mark@diveintopython.org
 
+def theTestSuite():
+	return unittest.TestLoader().loadTestsFromTestCase(UIDconverterTest)
+
 class UIDconverterTest(unittest.TestCase):
 
 	class RomanError(Exception): pass

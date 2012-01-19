@@ -7,13 +7,18 @@ import unittest
 import backup_gmail
 import locale
 
-class TestGmailDate(unittest.TestCase):
+def theTestSuite():
+	return unittest.TestLoader().loadTestsFromTestCase(GmailDateTest)
 
-	def setUp(self):
-		self.origlocale = locale.getlocale(locale.LC_TIME)
+class GmailDateTest(unittest.TestCase):
+
+	@classmethod
+	def setUpClass(cls):
+		cls.origlocale = locale.getlocale(locale.LC_TIME)
 		
-	def tearDown(self):
-		locale.setlocale(locale.LC_TIME, self.origlocale)
+	@classmethod
+	def tearDownClass(cls):
+		locale.setlocale(locale.LC_TIME, cls.origlocale)
 
 	def testToLocal(self):
 		locale.setlocale(locale.LC_TIME, 'de_DE')
