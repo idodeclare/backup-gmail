@@ -22,6 +22,7 @@ class MainWindow(QMainWindow):
 	def __init__(self, parent=None):
 		super(MainWindow, self).__init__(parent)
 		self.setWindowTitle("Backup Gmail")
+		self.setMinimumSize(640, 0)
 
 		self.config_label = QLabel("Profile:")
 		self.config_select = QComboBox()
@@ -69,6 +70,10 @@ class MainWindow(QMainWindow):
 		self.strict_exclude = QRadioButton("Exclude (Strict)")
 		self.label_filter_text = QLineEdit()
 		self.label_filter_text.setPlaceholderText("Optional; separate by '^'")
+		
+		self.label_regex_label = QLabel("Label Regex:")
+		self.label_regex_text = QLineEdit()
+		self.label_regex_text.setPlaceholderText("Optional")
 
 		self.label_target_label = QLabel("Restore also to:")
 		self.label_target_text = QLineEdit()
@@ -106,13 +111,16 @@ class MainWindow(QMainWindow):
 		vTmp.addWidget(self.exclude_label)
 		vTmp.addWidget(self.strict_exclude)
 		layout.addLayout(vTmp, 5, 2)
+		
+		layout.addWidget(self.label_regex_label, 6, 0)
+		layout.addWidget(self.label_regex_text, 6, 1)
 
-		layout.addWidget(self.backup_label, 6, 0)
-		layout.addWidget(self.backup_path, 6, 1)
-		layout.addWidget(self.backup_path_btn, 6, 2)
+		layout.addWidget(self.backup_label, 7, 0)
+		layout.addWidget(self.backup_path, 7, 1)
+		layout.addWidget(self.backup_path_btn, 7, 2)
 
-		layout.addWidget(self.label_target_label, 7, 0)
-		layout.addWidget(self.label_target_text, 7, 1)
+		layout.addWidget(self.label_target_label, 8, 0)
+		layout.addWidget(self.label_target_text, 8, 1)
 
 		btnLayout = QHBoxLayout()
 		btnLayout.addWidget(self.load_config_btn)
@@ -207,6 +215,11 @@ class MainWindow(QMainWindow):
 		  self.label_filter_text.setText(options.exclude_labels.decode('utf-8'))
 		else:
 			self.label_filter_text.setText("")
+			
+		if options.match_regex is not None:
+			self.label_regex_text.setText(options.match_regex.decode('utf-8'))
+		else:
+			self.label_regex_text.setText("")
 
 	def saveUI(self, options):
 		options.username = self.user_text.text().encode('utf-8')
@@ -233,6 +246,10 @@ class MainWindow(QMainWindow):
 			else:
 				options.exclude_labels = self.label_filter_text.text().encode('utf-8')
 				options.strict_exclude = self.strict_exclude.isChecked()
+		
+		options.match_regex = None
+		if self.label_regex_text.text() != '':
+			options.match_regex = self.label_regex_text.text().encode('utf-8')
 
 		options.label_target = None
 		if self.label_target_text.text() != '':

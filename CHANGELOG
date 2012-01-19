@@ -1,3 +1,10 @@
+backup-gmail 2012-1-18
+  * add --match_regex for label filtering
+  * add FilterLabels class to handle work of filtering
+  * SaveMbox and RestoreGmail now use non-strict label exclusion by default
+    and will recognize --strict_exclude
+  * improve help strings
+  
 backup-gmail 2012-1-17
   * fix: RestoreGmail works around imaplib's Time2InternalDate function to 
     avoid sending non-RFC2822 dates to IMAP

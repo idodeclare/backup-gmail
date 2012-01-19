@@ -30,7 +30,6 @@ class MailMetaData:
 			m.labels = set(tmp[4].split(" ^ "))
 		return m
 
-
 	def __init__(self, id, hash_value = None, folder = None):
 		self.id = id
 		self.seen = False
@@ -45,6 +44,36 @@ class MailMetaData:
 	def __str__(self):
 		return "%s %s %s %s %s" % (self.id, self.folder, self.hash_value, str(self.seen), " ^ ".join(self.labels))
 
+class FilterLabels:
+	def __init__(self, include_list, exclude_list, strict_exclude, match_regex):
+		self.include_list = None
+		if include_list is not None:
+			self.include_list = set(map(lambda y: y.lower(), include_list))
+		self.exclude_list = None
+		if exclude_list is not None:
+			self.exclude_list = set(map(lambda y: y.lower(), exclude_list))
+		self.strict_exclude = (strict_exclude == True)
+		self.rmatch = None
+		if match_regex is not None:
+			self.rmatch = re.compile(match_regex, re.I)
+
+	def filter(self, iterable):
+		if self.include_list is None:
+			result = list(iterable)
+		else:
+			result = filter(lambda x: x.lower() in self.include_list, iterable)
+			
+		if self.exclude_list is not None:
+			if not self.strict_exclude:
+				result = filter(lambda x: x.lower() not in self.exclude_list, result)
+			elif len(filter(lambda x: x.lower() in self.exclude_list, result)) > 0:
+				result = list()
+			
+		if self.rmatch is not None:
+			result = filter(lambda x: self.rmatch.search(x) is not None, result)
+			
+		return result
+	
 def getMID(env):
 	tmp = re.findall('(<[^>]+>)', env)
 	if len(tmp) == 0:
@@ -220,7 +249,7 @@ class Gmail(object):
 		labelFile = "%s/label" % (self.options.backup_dir, )
 		if os.path.exists(labelFile):
 			with open(labelFile) as f:
-				for line in f.readlines():
+				for line in f:
 					m = MailMetaData.fromStr(line.strip())
 					self.mails[m.id] = m
 					for l in m.labels:
@@ -276,7 +305,7 @@ class BackupGmail(Gmail):
 
 		isValid = self.isValidMailBox(label)
 		if isValid == False:
-			self.progress.setText("Label [%s] does not exist." % (label, ))
+			self.progress.setText("Label [%s] cannot be selected." % (label, ))
 			self.progress.newLine()
 			return
 
@@ -391,12 +420,17 @@ class BackupGmail(Gmail):
 		self.written = {}
 		self.exclude_mids = set()
 		if self.options.strict_exclude:
-			for l in filter(lambda x : x in exclude_labels, self.fetchLabelNames()):
-				mail_count = self.selectMailBox(l)
-				tmp = set(map(lambda x:x[1], self.fetchMessageId("1:%s" % (mail_count[0], ))))
-				self.exclude_mids.update(tmp)
-		
-		for l in set(include_labels).difference(set(exclude_labels)):
+			for l in exclude_labels:
+				if self.isValidMailBox(l):
+					mail_count = self.selectMailBox(l)
+					tmp = set(map(lambda x:x[1], self.fetchMessageId("1:%s" % (mail_count[0], ))))
+					self.exclude_mids.update(tmp)
+
+		# Note that strict_exclude is handled above, not here by FilterLabels
+		lfilt = FilterLabels(include_labels, exclude_labels, False, 
+			self.options.match_regex)
+		backupLabel = lfilt.filter(include_labels)
+		for l in backupLabel:
 			if self.canceling:
 				self.progress.setText("Backup was canceled by user.")
 				self.progress.newLine()
@@ -452,12 +486,16 @@ class SaveMbox(Gmail):
 
 	def execute(self):
 		date_range = [self.options.start_date, self.options.end_date]		
+		amFilteringDates = (date_range[0], date_range[1]) != (None, None)
 		include_labels = None
 		exclude_labels = []
 		if self.options.include_labels is not None:
 			include_labels = self.options.include_labels.split('^')
 		if self.options.exclude_labels is not None:
 			exclude_labels = self.options.exclude_labels.split('^')
+
+		lfilt = FilterLabels(include_labels, exclude_labels, self.options.strict_exclude, 
+			self.options.match_regex)
 
 		self.checkDir()
 		self.readLabelFile()
@@ -477,21 +515,17 @@ class SaveMbox(Gmail):
 			  self.progress.newLine()
 			  break
 			self.progress.setValue(i + 1)
-			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
-			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
-			if include_labels != None and include == set():
-				continue
-			if exclude_labels != None and exclude != set():
+			updateLabel = lfilt.filter(m.labels)
+			if len(updateLabel) < 1:
 				continue
 			with open("%s/%s/%s" % (self.options.backup_dir, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
-				if date_range is not None:
+				if amFilteringDates:
 					dateTuple = email.utils.parsedate(e.get('date'))
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
 					
-				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
 					self.__addToMBox(label, mail)
 				nsaved += 1
@@ -529,12 +563,16 @@ class RestoreGmail(Gmail):
 
 	def execute(self):
 		date_range = [self.options.start_date, self.options.end_date]		
+		amFilteringDates = (date_range[0], date_range[1]) != (None, None)
 		include_labels = None
 		exclude_labels = []
 		if self.options.include_labels is not None:
 			include_labels = self.options.include_labels.split('^')
 		if self.options.exclude_labels is not None:
 			exclude_labels = self.options.exclude_labels.split('^')
+
+		lfilt = FilterLabels(include_labels, exclude_labels, self.options.strict_exclude, 
+			self.options.match_regex)
 
 		self.checkDir()
 		self.login()
@@ -567,24 +605,19 @@ class RestoreGmail(Gmail):
 				self.progress.newLine()
 				break
 			self.progress.setValue(i + 1)
-			include = m.labels.intersection(include_labels) if include_labels != None else m.labels
-			exclude = m.labels.intersection(exclude_labels) if exclude_labels != None else set()
-			if include_labels != None and include == set():
-				continue
-			if exclude_labels != None and exclude != set():
+			updateLabel = lfilt.filter(m.labels)
+			if len(updateLabel) < 1:
 				continue
 			with open("%s/%s/%s" % (self.options.backup_dir, m.folder, m.hash_value)) as f:
 				mail = f.read()
 				e = email.message_from_string(mail)
 				date2822 = e.get('date')
-				if date_range is not None \
-						and (date_range[0] is not None or date_range[1] is not None):
+				if amFilteringDates:
 					dateTuple = email.utils.parsedate(date2822)
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
 				uid = self.__appendMessage(mail, date2822, labelTarget)
 				nrestored += 1
-				updateLabel = m.labels.difference(exclude).intersection(include)
 				for label in updateLabel:
 					if label.lower() not in inBoxes and label != allMail:
 						self.__assignLabel(uid, label)
@@ -700,6 +733,8 @@ def loadConfigFile(options, filename):
 			rsec.mbox_export = config.get(section, 'mbox_export')
 		if config.has_option(section, 'strict_exclude'):
 			rsec.strict_exclude = config.getboolean(section, 'strict_exclude')
+		if config.has_option(section, 'match_regex'):
+			rsec.match_regex = config.get(section, 'match_regex')
 		if rsec.username is not None and len(rsec.username):
 			rsec.password = keyu.get_password(rsec.username)
 		if rsec.password is None and config.has_option(section, 'password'):
@@ -725,6 +760,7 @@ def saveConfigFile(profiles, filename):
 		set_helper(config, section, 'exclude_labels', p.exclude_labels)
 		set_helper(config, section, 'mbox_export', p.mbox_export)
 		set_helper(config, section, 'strict_exclude', str(p.strict_exclude))
+		set_helper(config, section, 'match_regex', p.match_regex)
 		if p.password is not None and len(p.password):
 			if p.username is not None and len(p.username):
 				keyu.set_password(p.username, p.password)
@@ -740,11 +776,18 @@ def getOptionParser():
 	parser.add_option("-r", "--restore", dest="restore", action="store_true", default = False, help = "Restore backup to gmail (see --label)")
 	parser.add_option("-m", "--mbox_export", dest="mbox_export", action="store", help = "Save mbox(es) to directory")
 	parser.add_option("-k", "--keep_status", dest="keep_read", action="store_true", default = False, help = "Keep the mail read status")
-	parser.add_option("-s", "--start", dest="start_date", action="store", help = "Backup mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy in user's locale")
-	parser.add_option("-e", "--end", dest="end_date", action="store", help = "Backup mail until to this date (exclusive BEFORE). Format: dd-MMM-yyyy in user's locale")
-	parser.add_option("--include", dest="include_labels", action="store", help = "Only backup these labels. Seperate labels by '^' Format: label1^label2")
-	parser.add_option("--exclude", dest="exclude_labels", action="store", help = "Do not backup these labels. Seperate labels by '^' Format: label1^label2")
-	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, help = "Exclude messages also by message-id ")
+	parser.add_option("-s", "--start", dest="start_date", action="store", 
+		help = "Process mail starting from this date (inclusive SINCE). Format: dd-MMM-yyyy in user's locale")
+	parser.add_option("-e", "--end", dest="end_date", action="store", 
+		help = "Process mail until this date (exclusive BEFORE). Format: dd-MMM-yyyy in user's locale")
+	parser.add_option("--include", dest="include_labels", action="store", 
+		help = "Only process these labels. Separate by '^' Format: label1^label2")
+	parser.add_option("--exclude", dest="exclude_labels", action="store", 
+		help = "Do not process these labels. Separate by '^' Format: label1^label2")
+	parser.add_option("--strict_exclude", dest="strict_exclude", action="store_true", default = False, 
+		help = "Backup: exclude also by message-id; Restore/Save: exclude completely if labeled")
+	parser.add_option("--match", dest="match_regex", action="store", 
+		help = "Match labels to process by regex")
 	parser.add_option("-l", "--label", dest="label_target", action="store", help = "Restore also to specified label")
 	parser.add_option("-c", "--config", dest="config_file", action="store", help = "Load setting from config file")
 	parser.add_option("-p", "--profile", dest="profile", action="store", default = "Main", help = "Use this profile in the config file.")

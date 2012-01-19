@@ -9,6 +9,16 @@ or
 ./gui.py
 
 
+== Caveats ==
+
+Time Zones:
+  A backup operation processes --start and --end using Gmail's servers,
+and time zones are respected; dates will be qualified using the user's
+configured Gmail time zone.
+  --mbox_export and --restore, however, do not currently respect time 
+zones for --start and --end, so results can be slightly between the 
+operations.
+
 == Additional Libraries ==
 
 The Qt library, used by gui.py, may need to be installed for platforms
