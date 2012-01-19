@@ -1,18 +1,23 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import os
 import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__))+ '/..')
 import backup_gmail
-from optparse import OptionParser
+import getpass
+
+class MyOptions: pass
 
 if __name__ == '__main__':
-	parser = OptionParser()
-	(options, args) = parser.parse_args()
-	if len(args) < 2:
-		print 'xlist.py <username> <password>'
-		exit()
+	options = MyOptions()
+	options.username = None
+	while not options.username:
+		options.username = raw_input('Username: ')
+	options.password = None
+	while not options.password:
+		options.password = getpass.getpass()
 
-	gm = backup_gmail.Gmail(args[0], args[1])
+	gm = backup_gmail.Gmail(options)
 	gm.login()
-	try:
-		res = gm.fetchSpecialLabels();
-		print res
-	finally:
-		gm.close()
+	res = gm.fetchSpecialLabels();
+	print res
