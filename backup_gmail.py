@@ -44,19 +44,52 @@ class MailMetaData:
 	def __str__(self):
 		return "%s %s %s %s %s" % (self.id, self.folder, self.hash_value, str(self.seen), " ^ ".join(self.labels))
 
-class FilterLabels:
-	def __init__(self, include_list, exclude_list, strict_exclude, match_regex):
-		self.include_list = None
-		if include_list is not None:
-			self.include_list = set(map(lambda y: y.lower(), include_list))
-		self.exclude_list = None
-		if exclude_list is not None:
-			self.exclude_list = set(map(lambda y: y.lower(), exclude_list))
-		self.strict_exclude = (strict_exclude == True)
-		self.rmatch = None
-		if match_regex is not None:
-			self.rmatch = re.compile(match_regex, re.I)
+class FilterLabels(object):
+	def __init__(self, include_list = None, exclude_list = None, 
+		strict_exclude = None, match_regex = None):
+		self.__set_include_list(include_list)
+		self.__set_exclude_list(exclude_list)
+		self.__set_strict_exclude(strict_exclude)
+		self.__set_match_regex(match_regex)
 
+	def __get_include_list(self):
+		return self._include_list 
+
+	def __set_include_list(self, iterable):
+		self._include_list = None
+		if iterable is not None:
+			self._include_list = set(map(lambda y: y.lower(), iterable))
+
+	include_list = property(__get_include_list, __set_include_list)
+
+	def __get_exclude_list(self):
+		return self._exclude_list
+
+	def __set_exclude_list(self, iterable):
+		self._exclude_list = None
+		if iterable is not None:
+			self._exclude_list = set(map(lambda y: y.lower(), iterable))
+	
+	exclude_list = property(__get_exclude_list, __set_exclude_list)
+
+	def __get_strict_exclude(self):
+		return (self._strict_exclude == True)
+
+	def __set_strict_exclude(self, value):
+		self._strict_exclude = (value == True)
+	
+	strict_exclude = property(__get_strict_exclude, __set_strict_exclude)
+			
+	def __get_match_regex(self):
+		return self._match_regex.pattern if self._match_regex else None
+
+	def __set_match_regex(self, match_regex):
+		self._match_regex = None
+		if match_regex is not None:
+			self._match_regex = re.compile(match_regex, re.I)
+	
+	match_regex = property(__get_match_regex, __set_match_regex)
+			
 	def filter(self, iterable):
 		if self.include_list is None:
 			result = list(iterable)
@@ -68,10 +101,10 @@ class FilterLabels:
 				result = filter(lambda x: x.lower() not in self.exclude_list, result)
 			elif len(filter(lambda x: x.lower() in self.exclude_list, result)) > 0:
 				result = list()
-			
-		if self.rmatch is not None:
-			result = filter(lambda x: self.rmatch.search(x) is not None, result)
-			
+
+		# use private directly here
+		if self._match_regex is not None:
+			result = filter(lambda x: self._match_regex.search(x) is not None, result)			
 		return result
 	
 def getMID(env):
@@ -206,6 +239,16 @@ class Gmail(object):
 			gend = GmailDate.fromLocal(end)
 			ret, result = self.gmail.search(None, '(SINCE "%s") (BEFORE "%s")' % (gstart, gend))
 			return result[0].split()
+
+	def get_FilterLabels(self):
+		lfilt = FilterLabels()
+		if self.options.include_labels is not None:
+			lfilt.include_list = self.options.include_labels.split('^')
+		if self.options.exclude_labels is not None:
+			lfilt.exclude_list = self.options.exclude_labels.split('^')
+		lfilt.strict_exclude = self.options.strict_exclude
+		lfilt.match_regex = self.options.match_regex
+		return lfilt
 
 	def fetchSpecialLabels(self):
 		ret, result = self.gmail.xatom('XLIST', '', '*')
@@ -416,7 +459,7 @@ class BackupGmail(Gmail):
 		labels = filter(lambda x : x not in ignore , labels)
 		return labels
 
-	def __fetchByLabels(self, date_range, include_labels, exclude_labels):
+	def __fetchByLabels(self):
 		self.written = {}
 		self.exclude_mids = set()
 		if self.options.strict_exclude:
@@ -426,10 +469,13 @@ class BackupGmail(Gmail):
 					tmp = set(map(lambda x:x[1], self.fetchMessageId("1:%s" % (mail_count[0], ))))
 					self.exclude_mids.update(tmp)
 
+		date_range = [self.options.start_date, self.options.end_date]
+		lfilt = self.get_FilterLabels()
 		# Note that strict_exclude is handled above, not here by FilterLabels
-		lfilt = FilterLabels(include_labels, exclude_labels, False, 
-			self.options.match_regex)
-		backupLabel = lfilt.filter(include_labels)
+		lfilt.strict_exclude = False
+
+		default_labels = self.__fetchDefaultLabels()
+		backupLabel = lfilt.filter(default_labels)
 		for l in backupLabel:
 			if self.canceling:
 				self.progress.setText("Backup was canceled by user.")
@@ -437,7 +483,7 @@ class BackupGmail(Gmail):
 				break;
 			self.__fetchMailByLabel(l, date_range)
 			
-		self.progress.setText("Backed up %d physical message(s)." % (len(self.written), ))
+		self.progress.setText("Backed up %d previously-unseen message(s)." % (len(self.written), ))
 		self.progress.newLine()
 	
 	def __outputLable(self):
@@ -451,23 +497,13 @@ class BackupGmail(Gmail):
 		self.checkDir()
 
 	def execute(self):
-		date_range = [self.options.start_date, self.options.end_date]		
-		include_labels = None
-		exclude_labels = []
-		if self.options.include_labels is not None:
-			include_labels = self.options.include_labels.split('^')
-		if self.options.exclude_labels is not None:
-			exclude_labels = self.options.exclude_labels.split('^')
-
 		self.login()
 		self.peek = self.options.keep_read
 		self.makeDir()
 		self.readLabelFile()
 
 		try:
-			if include_labels == None:
-				include_labels = self.__fetchDefaultLabels()
-			self.__fetchByLabels(date_range, include_labels, exclude_labels)
+			self.__fetchByLabels()
 		finally:
 			self.__outputLable()
 			self.canceling = False
@@ -487,15 +523,7 @@ class SaveMbox(Gmail):
 	def execute(self):
 		date_range = [self.options.start_date, self.options.end_date]		
 		amFilteringDates = (date_range[0], date_range[1]) != (None, None)
-		include_labels = None
-		exclude_labels = []
-		if self.options.include_labels is not None:
-			include_labels = self.options.include_labels.split('^')
-		if self.options.exclude_labels is not None:
-			exclude_labels = self.options.exclude_labels.split('^')
-
-		lfilt = FilterLabels(include_labels, exclude_labels, self.options.strict_exclude, 
-			self.options.match_regex)
+		lfilt = self.get_FilterLabels()
 
 		self.checkDir()
 		self.readLabelFile()
@@ -564,15 +592,7 @@ class RestoreGmail(Gmail):
 	def execute(self):
 		date_range = [self.options.start_date, self.options.end_date]		
 		amFilteringDates = (date_range[0], date_range[1]) != (None, None)
-		include_labels = None
-		exclude_labels = []
-		if self.options.include_labels is not None:
-			include_labels = self.options.include_labels.split('^')
-		if self.options.exclude_labels is not None:
-			exclude_labels = self.options.exclude_labels.split('^')
-
-		lfilt = FilterLabels(include_labels, exclude_labels, self.options.strict_exclude, 
-			self.options.match_regex)
+		lfilt = self.get_FilterLabels()
 
 		self.checkDir()
 		self.login()
