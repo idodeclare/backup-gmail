@@ -47,10 +47,10 @@ class MailMetaData:
 class FilterLabels(object):
 	def __init__(self, include_list = None, exclude_list = None, 
 		strict_exclude = None, match_regex = None):
-		self.__set_include_list(include_list)
-		self.__set_exclude_list(exclude_list)
-		self.__set_strict_exclude(strict_exclude)
-		self.__set_match_regex(match_regex)
+		self.include_list = include_list
+		self.exclude_list = exclude_list
+		self.strict_exclude = strict_exclude
+		self.match_regex = match_regex
 
 	def __get_include_list(self):
 		return self._include_list 
