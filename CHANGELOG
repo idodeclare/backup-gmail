@@ -1,3 +1,6 @@
+backup-gmail 2012-1-22
+  * backup is now case-insensitive for --include 
+
 backup-gmail 2012-1-18
   * add --match_regex for label filtering
   * add FilterLabels class to handle work of filtering

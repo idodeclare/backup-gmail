@@ -462,7 +462,12 @@ class BackupGmail(Gmail):
 	def __fetchByLabels(self):
 		self.written = {}
 		self.exclude_mids = set()
-		if self.options.strict_exclude:
+
+		lfilt = self.get_FilterLabels()
+		lfilt.strict_exclude = False  # strict_exclude is done via exclude_mids below
+		exclude_labels = lfilt.exclude_list
+
+		if self.options.strict_exclude and exclude_labels is not None:
 			for l in exclude_labels:
 				if self.isValidMailBox(l):
 					mail_count = self.selectMailBox(l)
@@ -470,9 +475,6 @@ class BackupGmail(Gmail):
 					self.exclude_mids.update(tmp)
 
 		date_range = [self.options.start_date, self.options.end_date]
-		lfilt = self.get_FilterLabels()
-		# Note that strict_exclude is handled above, not here by FilterLabels
-		lfilt.strict_exclude = False
 
 		default_labels = self.__fetchDefaultLabels()
 		backupLabel = lfilt.filter(default_labels)
