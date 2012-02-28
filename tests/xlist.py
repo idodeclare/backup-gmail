@@ -19,5 +19,7 @@ if __name__ == '__main__':
 
 	gm = backup_gmail.Gmail(options)
 	gm.login()
+	res = gm.gmail.list()
+	print res
 	res = gm.fetchSpecialLabels();
 	print res

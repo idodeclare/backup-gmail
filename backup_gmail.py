@@ -361,7 +361,6 @@ class BackupGmail(Gmail):
 
 		self.__initProgress(infos)
 		self.progress.setText("Fetching %s [@value/@max]" % (label, ))
-		total = 0
 
 		for i, info in enumerate(infos):
 			if self.canceling:
@@ -372,8 +371,7 @@ class BackupGmail(Gmail):
 					self.__fetchMail(uid, seen, label, size)
 			else:
 				self.mails[mid].labels.add(label)
-			total += int(size)
-			self.progress.setValue(total)
+				self.progress.setValue(self.progress.value + int(size), True)
 			
 		#Flush all pending request
 		self.__flushFetchMailRequest()
@@ -425,6 +423,7 @@ class BackupGmail(Gmail):
 		for i, rfc in enumerate(rfcs):
 			self.__processMail(rfc[1], *self.fetchBuffer[i])
 
+		self.progress.setValue(self.progress.value + self.fetchSize)
 		self.fetchBuffer = []
 		self.fetchEnd = '-1'
 		self.fetchSize = 0
@@ -665,9 +664,10 @@ class TerminalProgress:
 		if v is not None:
 			self.value = v
 
-	def setValue(self, value):
+	def setValue(self, value, noupdate=False):
 		self.value = value
-		self.update()
+		if (not noupdate):
+			self.update()
 
 	def setText(self, t):
 		self.text = t
