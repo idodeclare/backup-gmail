@@ -1,3 +1,7 @@
+backup-gmail 2012-2-28
+  * Update progress only when fetch batches complete, not after every 
+    message is queued or skipped
+
 backup-gmail 2012-1-22
   * backup is now case-insensitive for --include 
 
