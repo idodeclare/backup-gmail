@@ -1,17 +1,20 @@
+Copyright 2012, Chris Fraire
 Copyright 2011, Joseph Wen
 
 For more information visit:
-https://launchpad.net/backup-gmail
+https://github.com/idodeclare/backup-gmail
 
-== Usage ==
+Usage 
+=====
 ./backup_gmail.py
 or
 ./gui.py
 
+Caveats 
+=======
 
-== Caveats ==
-
-Time Zones:
+Time Zones
+----------
   A backup operation processes --start and --end using Gmail's servers,
 and time zones are respected; dates will be qualified using the user's
 configured Gmail time zone.
@@ -20,7 +23,8 @@ zones for --start and --end, so results can be slightly incorrect near
 the date range boundaries.
 
 
-== Additional Libraries ==
+Additional Libraries 
+====================
 
 The Qt library, used by gui.py, may need to be installed for platforms
 where it is not available by default (e.g., Mac OS X, Windows, etc.):
@@ -34,4 +38,3 @@ PySide for Qt, used by gui.py, is available for various platforms at:
 keyring for Python, used for secure storage of passwords, is available at:
 
   http://pypi.python.org/pypi/keyring#downloads
-  
