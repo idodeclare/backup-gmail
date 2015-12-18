@@ -1,6 +1,10 @@
-Copyright 2012, Chris Fraire
-
 Copyright 2011, Joseph Wen
+Copyright 2015, Chris Fraire
+
+This application provides both a command line interface and graphical user
+interface to backup and restore Gmail data via IMAP. It support incremental
+backup based on message-id and sha1. It also preserves the read/unread state
+on the Gmail server.
 
 For more information visit:
 https://github.com/idodeclare/backup-gmail
