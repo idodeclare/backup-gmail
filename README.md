@@ -1,4 +1,7 @@
+# backup_gmail #
+
 Copyright 2011, Joseph Wen
+
 Copyright 2015, Chris Fraire
 
 This application provides both a command line interface and graphical user
