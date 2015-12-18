@@ -1,4 +1,5 @@
-# backup_gmail #
+backup_gmail
+============
 
 Copyright 2011, Joseph Wen
 
@@ -40,11 +41,11 @@ Additional Libraries
 The Qt library, used by gui.py, may need to be installed for platforms
 where it is not available by default (e.g., Mac OS X, Windows, etc.):
 
-  http://qt.nokia.com/downloads
+  http://www.qt.io/download-open-source/
 
 PySide for Qt, used by gui.py, is available for various platforms at:
 
-  http://developer.qt.nokia.com/wiki/PySideDownloads
+  https://wiki.qt.io/Category:LanguageBindings::PySide::Downloads
 
 keyring for Python, used for secure storage of passwords, is available at:
 
