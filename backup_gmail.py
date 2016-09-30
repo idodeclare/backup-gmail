@@ -2,6 +2,7 @@
 
 """
 Copyright 2011, Joseph Wen
+Copyright 2016, C Fraire <cfraire@me.com>.
 """
 
 #TODO: MailBox
@@ -574,9 +575,14 @@ class RestoreGmail(Gmail):
 		utf7mailbox = None
 		if mailbox is not None:
 			utf7mailbox = imapUTF7Encode(mailbox.decode('utf-8'))
-		if isinstance(date, str) and (date[0],date[-1]) != ('"','"'):
-			date = '"%s"' % date
+		if isinstance(date, str):
+			if len(date) < 1:
+				date = None
+			elif (date[0],date[-1]) != ('"','"'):
+				date = '"%s"' % date
 		ret, msg = self.gmail.append(utf7mailbox, None, date, message)
+		if ret != 'OK':
+			return ''
 		return re.findall("APPENDUID [0-9]+ ([0-9]+)", msg[0])[0]
 
 	def __assignLabel(self, uid, label):
@@ -638,10 +644,15 @@ class RestoreGmail(Gmail):
 					if not self.isInTimeFrame(date_range, dateTuple):
 						continue
 				uid = self.__appendMessage(mail, date2822, labelTarget)
-				nrestored += 1
-				for label in updateLabel:
-					if label.lower() not in inBoxes and label != allMail:
-						self.__assignLabel(uid, label)
+				if len(uid) < 1:
+					self.progress.newLine()
+					self.progress.setText("Failed to append %s/%s." % (m.folder, m.hash_value))
+					self.progress.newLine()
+				else:
+					nrestored += 1
+					for label in updateLabel:
+						if label.lower() not in inBoxes and label != allMail:
+							self.__assignLabel(uid, label)
 
 		self.progress.setText("Restored %d of %d message(s)." % (nrestored, ntotal))
 		self.progress.newLine()
